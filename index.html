@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WAREHOUSE INVENTORY</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div><h1>📦 WAREHOUSE INVENTORY</h1><p>Online Inventory Management System</p></div>
+  <div class="user-area"><span id="userEmail">Not logged in</span><button id="logoutBtn" class="logout-btn">Logout</button></div>
+</header>
+
+<main class="container">
+<section id="loginSection" class="card login-card">
+  <h2>🔐 Login</h2>
+  <p class="section-description">Login to access the Warehouse Inventory System.</p>
+  <div class="form-group"><label for="email">Email</label><input type="email" id="email" placeholder="Enter your email"></div>
+  <div class="form-group"><label for="password">Password</label><input type="password" id="password" placeholder="Enter your password"></div>
+  <button id="loginBtn" class="primary-btn">LOGIN</button>
+  <p id="loginMessage" class="message"></p>
+</section>
+
+<section id="appSection" class="hidden">
+  <div class="menu-grid">
+    <button class="menu-btn active" data-section="inventorySection">📦 Beginning Inventory</button>
+    <button class="menu-btn" data-section="transferSection">🔄 Stock Transfer</button>
+    <button class="menu-btn" data-section="masterlistSection">📋 Masterlist</button>
+    <button class="menu-btn" data-section="currentStockSection">📊 Current Inventory</button>
+    <button class="menu-btn" data-section="summarySection">📈 Inventory Summary</button>
+  </div>
+
+  <section id="inventorySection" class="system-section">
+    <div class="card">
+      <div class="section-header"><div><h2>📦 Beginning Inventory</h2><p>Encode your beginning stock.</p></div></div>
+      <div class="form-group"><label for="warehouse">Warehouse Location</label>
+        <select id="warehouse">
+          <option value="">Select Warehouse</option><option value="WMECOM">WMECOM</option><option value="WMLAZ">WMLAZ</option>
+          <option value="WMSHOPEE">WMSHOPEE</option><option value="WMAIN">WMAIN</option><option value="WMBBD">WMBBD</option><option value="OTHER">OTHER</option>
+        </select>
+      </div>
+      <div class="form-grid">
+        <div class="form-group full-width"><label for="itemSearch">Search Item Code / Description</label><div class="search-wrapper">
+          <input type="text" id="itemSearch" placeholder="Type item code or description..." autocomplete="off"><div id="itemSuggestions" class="suggestions"></div>
+        </div></div>
+        <div class="form-group"><label for="itemCode">Item Code</label><input type="text" id="itemCode" readonly></div>
+        <div class="form-group"><label for="itemDescription">Item Description</label><input type="text" id="itemDescription" readonly></div>
+        <div class="form-group"><label for="category">Category</label><input type="text" id="category" readonly></div>
+        <div class="form-group"><label for="binLocation">Bin Location</label><div class="search-wrapper">
+          <input type="text" id="binLocation" placeholder="Type Bin e.g. A1-001" autocomplete="off" maxlength="6"><div id="binSuggestions" class="suggestions"></div>
+        </div><small>Valid bins: A1-001 to I5-027</small></div>
+        <div class="form-group"><label for="expiryDate">Expiry Date</label><input type="date" id="expiryDate"></div>
+        <div class="form-group"><label for="quantity">Beginning Quantity</label><input type="number" id="quantity" min="0" step="0.01" placeholder="Enter quantity"></div>
+      </div>
+      <div class="button-row"><button id="addInventoryRowBtn" class="primary-btn">➕ ADD TO TABLE</button><button id="clearFormBtn" class="secondary-btn">CLEAR</button></div>
+      <p id="inventoryMessage" class="message"></p>
+      <div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Warehouse</th><th>Bin</th><th>Expiry</th><th>Quantity</th><th>Action</th></tr></thead><tbody id="pendingInventoryTableBody"></tbody></table></div>
+      <div class="button-row"><button id="saveInventoryBtn" class="primary-btn">💾 SAVE ALL</button></div>
+    </div>
+  </section>
+
+  <section id="transferSection" class="system-section hidden">
+    <div class="card">
+      <div class="section-header"><div><h2>🔄 Stock Transfer</h2><p>Transfer stock from one warehouse/bin to another while keeping the same item and expiry.</p></div></div>
+
+      <div class="transfer-panel">
+        <h3>FROM</h3>
+        <div class="form-grid">
+          <div class="form-group"><label for="transferFromWarehouse">Warehouse</label><select id="transferFromWarehouse"><option value="">Select Warehouse</option></select></div>
+          <div class="form-group"><label for="transferFromBin">Bin</label><div class="search-wrapper">
+            <input id="transferFromBin" type="text" placeholder="e.g. B5-001" autocomplete="off" maxlength="6"><div id="transferFromBinSuggestions" class="suggestions"></div>
+          </div></div>
+          <div class="form-group full-width"><label for="transferItemSearch">Item</label><div class="search-wrapper">
+            <input id="transferItemSearch" type="text" placeholder="Search item code or description..." autocomplete="off"><div id="transferItemSuggestions" class="suggestions"></div>
+          </div></div>
+          <div class="form-group"><label for="transferItemCode">Item Code</label><input id="transferItemCode" type="text" readonly></div>
+          <div class="form-group"><label for="transferItemDescription">Description</label><input id="transferItemDescription" type="text" readonly></div>
+          <div class="form-group"><label for="transferExpiry">Expiry</label><input id="transferExpiry" type="date" readonly></div>
+        </div>
+        <div class="available-box">Available: <strong id="transferAvailable">0</strong></div>
+      </div>
+
+      <div class="transfer-arrow">↓ TRANSFER</div>
+
+      <div class="transfer-panel">
+        <h3>TO</h3>
+        <div class="form-grid">
+          <div class="form-group"><label for="transferToWarehouse">Warehouse</label><select id="transferToWarehouse"><option value="">Select Warehouse</option></select></div>
+          <div class="form-group"><label for="transferToBin">Bin</label><div class="search-wrapper">
+            <input id="transferToBin" type="text" placeholder="e.g. B1-002" autocomplete="off" maxlength="6"><div id="transferToBinSuggestions" class="suggestions"></div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group"><label for="transferQuantity">Transfer Quantity</label><input id="transferQuantity" type="number" min="0.01" step="0.01" placeholder="40"></div>
+        <div class="form-group"><label for="transferReference">Reference No.</label><input id="transferReference" class="transfer-ref" type="text" placeholder="ST-0001"></div>
+      </div>
+      <div class="button-row"><button id="transferStockBtn" class="primary-btn">🔄 TRANSFER STOCK</button><button id="clearTransferBtn" class="secondary-btn">CLEAR</button></div>
+      <p id="transferMessage" class="message"></p>
+      <div id="transferResult" class="transfer-success hidden"></div>
+    </div>
+  </section>
+
+  <section id="masterlistSection" class="system-section hidden"><div class="card">
+    <div class="section-header"><div><h2>📋 Masterlist</h2><p>Upload your Excel Masterlist.</p></div></div>
+    <div class="upload-box"><label for="masterlistFile">Select Masterlist Excel File</label><input type="file" id="masterlistFile" accept=".xlsx,.xls,.xlsm"><button id="uploadMasterlistBtn" class="primary-btn">📥 UPLOAD MASTERLIST</button></div>
+    <p id="masterlistMessage" class="message"></p><div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Category</th></tr></thead><tbody id="masterlistTableBody"></tbody></table></div>
+  </div></section>
+
+  <section id="currentStockSection" class="system-section hidden"><div class="card">
+    <div class="section-header"><div><h2>📊 Current Inventory</h2><p>View your online inventory.</p></div><button id="refreshInventoryBtn" class="secondary-btn">🔄 Refresh</button></div>
+    <div class="form-grid inventory-filter-grid">
+      <div class="form-group"><label for="inventoryLocationFilter">Warehouse / Location</label><select id="inventoryLocationFilter"><option value="">All Locations</option></select></div>
+    </div>
+    <div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Warehouse</th><th>Bin</th><th>Expiry</th><th>Quantity</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
+  </div></section>
+
+  <section id="summarySection" class="system-section hidden"><div class="card">
+    <div class="section-header"><div><h2>📈 Inventory Summary</h2><p>Total quantity per warehouse, item and expiry date.</p></div><button id="refreshSummaryBtn" class="secondary-btn">🔄 Refresh</button></div>
+    <div class="form-grid"><div class="form-group"><label for="summaryWarehouse">Warehouse Location</label><select id="summaryWarehouse"><option value="">All Warehouses</option></select></div></div>
+    <div class="table-wrapper"><table><thead><tr><th>Warehouse</th><th>Item Code</th><th>Description</th><th>Category</th><th>Expiry Date</th><th>Total Quantity</th></tr></thead><tbody id="summaryTableBody"></tbody></table></div>
+  </div></section>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
