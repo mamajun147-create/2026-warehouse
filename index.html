@@ -110,15 +110,17 @@
   </div></section>
 
   <section id="currentStockSection" class="system-section hidden"><div class="card">
-    <div class="section-header"><div><h2>📊 Current Inventory</h2><p>View your online inventory.</p></div><button id="refreshInventoryBtn" class="secondary-btn">🔄 Refresh</button></div>
+    <div class="section-header"><div><h2>📊 Current Inventory</h2><p>Search item/description and filter by warehouse location.</p></div><div class="button-row compact-actions"><button id="refreshInventoryBtn" class="secondary-btn">🔄 Refresh</button><button id="resetInventoryBtn" class="danger-btn">🗑️ RESET INVENTORY</button></div></div>
     <div class="form-grid inventory-filter-grid">
       <div class="form-group"><label for="inventoryLocationFilter">Warehouse / Location</label><select id="inventoryLocationFilter"><option value="">All Locations</option></select></div>
+      <div class="form-group"><label for="inventorySearch">Search Item Code / Description</label><input type="text" id="inventorySearch" placeholder="Type item code or description..."></div>
     </div>
+    <p id="inventoryFilterMessage" class="message"></p>
     <div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Warehouse</th><th>Bin</th><th>Expiry</th><th>Quantity</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
   </div></section>
 
   <section id="summarySection" class="system-section hidden"><div class="card">
-    <div class="section-header"><div><h2>📈 Inventory Summary</h2><p>Total quantity per warehouse, item and expiry date.</p></div><button id="refreshSummaryBtn" class="secondary-btn">🔄 Refresh</button></div>
+    <div class="section-header"><div><h2>📈 Inventory Summary</h2><p>Total quantity per warehouse, item and expiry date.</p></div><div class="button-row compact-actions"><button id="refreshSummaryBtn" class="secondary-btn">🔄 Refresh</button><button id="resetSummaryBtn" class="danger-btn">🗑️ RESET ALL</button></div></div>
     <div class="form-grid"><div class="form-group"><label for="summaryWarehouse">Warehouse Location</label><select id="summaryWarehouse"><option value="">All Warehouses</option></select></div></div>
     <div class="table-wrapper"><table><thead><tr><th>Warehouse</th><th>Item Code</th><th>Description</th><th>Category</th><th>Expiry Date</th><th>Total Quantity</th></tr></thead><tbody id="summaryTableBody"></tbody></table></div>
   </div></section>

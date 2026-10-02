@@ -51,3 +51,39 @@ thead{background:#1f2937;color:#fff}th,td{padding:12px;border-bottom:1px solid #
   padding: 24px !important;
   color: #6b7280;
 }
+
+/* Current inventory filters and reset action */
+.inventory-filter-grid {
+    margin-bottom: 8px;
+}
+
+.compact-actions {
+    margin: 0;
+    justify-content: flex-end;
+}
+
+.danger-btn {
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.danger-btn:hover {
+    background: #b91c1c;
+}
+
+.danger-btn:disabled {
+    opacity: .65;
+    cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+    .compact-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
