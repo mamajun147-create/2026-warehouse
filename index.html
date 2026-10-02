@@ -9,7 +9,7 @@
 <body>
 <header class="topbar">
   <div><h1>📦 WAREHOUSE INVENTORY</h1><p>Online Inventory Management System</p></div>
-  <div class="user-area"><span id="userEmail">Not logged in</span><button id="logoutBtn" class="logout-btn">Logout</button></div>
+  <div class="user-area"><span id="userEmail">Not logged in</span><span id="userRoleBadge" class="role-badge hidden"></span><button id="logoutBtn" class="logout-btn">Logout</button></div>
 </header>
 
 <main class="container">
@@ -110,14 +110,31 @@
   </div></section>
 
   <section id="currentStockSection" class="system-section hidden"><div class="card">
-    <div class="section-header"><div><h2>📊 Current Inventory</h2><p>Search item/description and filter by warehouse location.</p></div><div class="button-row compact-actions"><button id="refreshInventoryBtn" class="secondary-btn">🔄 Refresh</button><button id="resetInventoryBtn" class="danger-btn">🗑️ RESET INVENTORY</button></div></div>
+    <div class="section-header"><div><h2>📊 Current Inventory</h2><p>Search item/description and filter by warehouse location.</p></div><div class="button-row compact-actions"><button id="refreshInventoryBtn" class="secondary-btn">🔄 Refresh</button><button id="downloadInventoryBtn" class="secondary-btn">📥 Download Excel</button><button id="resetInventoryBtn" class="danger-btn">🗑️ RESET INVENTORY</button></div></div>
     <div class="form-grid inventory-filter-grid">
       <div class="form-group"><label for="inventoryLocationFilter">Warehouse / Location</label><select id="inventoryLocationFilter"><option value="">All Locations</option></select></div>
       <div class="form-group"><label for="inventorySearch">Search Item Code / Description</label><input type="text" id="inventorySearch" placeholder="Type item code or description..."></div>
     </div>
     <p id="inventoryFilterMessage" class="message"></p>
-    <div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Warehouse</th><th>Bin</th><th>Expiry</th><th>Quantity</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
+    <div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Warehouse</th><th>Bin</th><th>Expiry</th><th>Quantity</th><th class="admin-only">Actions</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
   </div></section>
+
+  <div id="editInventoryModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="section-header"><div><h2>✏️ Edit Inventory</h2><p>Update the selected inventory record.</p></div><button id="closeEditModalBtn" class="secondary-btn" type="button">✕ Close</button></div>
+      <input type="hidden" id="editInventoryId">
+      <div class="form-grid">
+        <div class="form-group full-width"><label for="editItemCode">Item Code</label><select id="editItemCode"></select></div>
+        <div class="form-group"><label for="editItemDescription">Description</label><input id="editItemDescription" type="text" readonly></div>
+        <div class="form-group"><label for="editWarehouse">Warehouse</label><select id="editWarehouse"><option value="WMECOM">WMECOM</option><option value="WMLAZ">WMLAZ</option><option value="WMSHOPEE">WMSHOPEE</option><option value="WMAIN">WMAIN</option><option value="WMBBD">WMBBD</option><option value="OTHER">OTHER</option></select></div>
+        <div class="form-group"><label for="editBin">Bin</label><input id="editBin" type="text" maxlength="6"></div>
+        <div class="form-group"><label for="editExpiry">Expiry Date</label><input id="editExpiry" type="date"></div>
+        <div class="form-group"><label for="editQuantity">Quantity</label><input id="editQuantity" type="number" min="0" step="0.01"></div>
+      </div>
+      <p id="editInventoryMessage" class="message"></p>
+      <div class="button-row"><button id="saveEditInventoryBtn" class="primary-btn" type="button">💾 SAVE CHANGES</button></div>
+    </div>
+  </div>
 
   <section id="summarySection" class="system-section hidden"><div class="card">
     <div class="section-header"><div><h2>📈 Inventory Summary</h2><p>Total quantity per warehouse, item and expiry date.</p></div><div class="button-row compact-actions"><button id="refreshSummaryBtn" class="secondary-btn">🔄 Refresh</button><button id="resetSummaryBtn" class="danger-btn">🗑️ RESET ALL</button></div></div>

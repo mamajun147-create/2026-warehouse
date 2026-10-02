@@ -28,6 +28,7 @@ let selectedItem = null;
 
 let pendingInventory = [];
 let currentInventoryData = [];
+let currentUserRole = "admin";
 
 
 // =====================================================
@@ -45,6 +46,20 @@ const logoutBtn = document.getElementById("logoutBtn");
 
 const loginMessage = document.getElementById("loginMessage");
 const userEmail = document.getElementById("userEmail");
+const userRoleBadge = document.getElementById("userRoleBadge");
+
+// Edit Inventory
+const editInventoryModal = document.getElementById("editInventoryModal");
+const editInventoryId = document.getElementById("editInventoryId");
+const editItemCode = document.getElementById("editItemCode");
+const editItemDescription = document.getElementById("editItemDescription");
+const editWarehouse = document.getElementById("editWarehouse");
+const editBin = document.getElementById("editBin");
+const editExpiry = document.getElementById("editExpiry");
+const editQuantity = document.getElementById("editQuantity");
+const editInventoryMessage = document.getElementById("editInventoryMessage");
+const saveEditInventoryBtn = document.getElementById("saveEditInventoryBtn");
+const closeEditModalBtn = document.getElementById("closeEditModalBtn");
 
 
 // Beginning Inventory
@@ -100,6 +115,9 @@ const inventoryTableBody =
 const refreshInventoryBtn =
     document.getElementById("refreshInventoryBtn");
 
+const downloadInventoryBtn =
+    document.getElementById("downloadInventoryBtn");
+
 const inventoryLocationFilter =
     document.getElementById("inventoryLocationFilter");
 
@@ -126,6 +144,26 @@ const refreshSummaryBtn =
 const resetSummaryBtn =
     document.getElementById("resetSummaryBtn");
 
+// Stock Transfer
+let transferInventory = [];
+const transferFromWarehouse = document.getElementById("transferFromWarehouse");
+const transferFromBin = document.getElementById("transferFromBin");
+const transferFromBinSuggestions = document.getElementById("transferFromBinSuggestions");
+const transferItemSearch = document.getElementById("transferItemSearch");
+const transferItemSuggestions = document.getElementById("transferItemSuggestions");
+const transferItemCode = document.getElementById("transferItemCode");
+const transferItemDescription = document.getElementById("transferItemDescription");
+const transferExpiry = document.getElementById("transferExpiry");
+const transferAvailable = document.getElementById("transferAvailable");
+const transferToWarehouse = document.getElementById("transferToWarehouse");
+const transferToBin = document.getElementById("transferToBin");
+const transferToBinSuggestions = document.getElementById("transferToBinSuggestions");
+const transferQuantity = document.getElementById("transferQuantity");
+const transferReference = document.getElementById("transferReference");
+const transferStockBtn = document.getElementById("transferStockBtn");
+const transferMessage = document.getElementById("transferMessage");
+const transferResult = document.getElementById("transferResult");
+
 
 // =====================================================
 // INITIALIZATION
@@ -144,11 +182,61 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupBinSearch();
 
     setupSummary();
+    setupTransfer();
+    fillTransferWarehouses();
 
     await checkLogin();
 
 });
 
+
+// =====================================================
+// USER ROLE
+// =====================================================
+
+async function loadUserRole(userId) {
+    currentUserRole = "admin";
+
+    try {
+        const { data, error } = await supabaseClient
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+        if (!error && data && (data.role === "viewer" || data.role === "admin")) {
+            currentUserRole = data.role;
+        }
+    } catch (error) {
+        console.warn("Role lookup unavailable; defaulting to admin UI:", error);
+    }
+
+    if (userRoleBadge) {
+        userRoleBadge.textContent = currentUserRole;
+        userRoleBadge.classList.remove("hidden", "admin", "viewer");
+        userRoleBadge.classList.add(currentUserRole);
+    }
+}
+
+function isAdmin() {
+    return currentUserRole === "admin";
+}
+
+function applyRolePermissions() {
+    const adminElements = document.querySelectorAll(".admin-only");
+    adminElements.forEach(el => el.classList.toggle("hidden", !isAdmin()));
+
+    const adminMenuSections = ["inventorySection", "transferSection"];
+    document.querySelectorAll(".menu-btn").forEach(btn => {
+        const restricted = adminMenuSections.includes(btn.dataset.section);
+        btn.classList.toggle("hidden", restricted && !isAdmin());
+    });
+
+    if (masterlistFile) masterlistFile.classList.toggle("hidden", !isAdmin());
+    if (uploadMasterlistBtn) uploadMasterlistBtn.classList.toggle("hidden", !isAdmin());
+    if (resetInventoryBtn) resetInventoryBtn.classList.toggle("hidden", !isAdmin());
+    if (resetSummaryBtn) resetSummaryBtn.classList.toggle("hidden", !isAdmin());
+}
 
 // =====================================================
 // MENU
@@ -212,12 +300,140 @@ function setupMenu() {
                 await loadInventorySummary();
             }
 
+            if (targetSection === "transferSection" && isAdmin()) {
+                await prepareTransferSection();
+            }
+
         });
 
     });
 
 }
 
+
+// =====================================================
+// STOCK TRANSFER
+// =====================================================
+
+function fillTransferWarehouses() {
+    [transferFromWarehouse, transferToWarehouse].forEach(select => {
+        if (!select) return;
+        select.innerHTML = '<option value="">Select Warehouse</option>';
+        ["WMECOM", "WMLAZ", "WMSHOPEE", "WMAIN", "WMBBD", "OTHER"].forEach(w => {
+            select.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`);
+        });
+    });
+}
+
+function setupTransfer() {
+    if (!transferStockBtn) return;
+    setupBinInput(transferFromBin, transferFromBinSuggestions);
+    setupBinInput(transferToBin, transferToBinSuggestions);
+    transferFromWarehouse.addEventListener("change", refreshTransferSource);
+    transferFromBin.addEventListener("change", refreshTransferSource);
+    transferItemSearch.addEventListener("input", () => showItemSuggestions(transferItemSearch, transferItemSuggestions, selectTransferItem));
+    transferItemSearch.addEventListener("keydown", e => { if (e.key === "Enter") selectItemByText(e, transferItemSearch, selectTransferItem); });
+    transferStockBtn.addEventListener("click", executeStockTransfer);
+    document.getElementById("clearTransferBtn")?.addEventListener("click", clearTransferForm);
+}
+
+function selectTransferItem(item) {
+    transferItemSearch.value = item.item_code || "";
+    transferItemCode.value = item.item_code || "";
+    transferItemDescription.value = item.item_description || "";
+    hideSuggestions(transferItemSuggestions);
+    refreshTransferSource();
+}
+
+async function prepareTransferSection() {
+    if (!isAdmin()) return;
+    await loadTransferInventory();
+    refreshTransferSource();
+}
+
+async function loadTransferInventory() {
+    const { data, error } = await supabaseClient.from("inventory").select(`id,warehouse_location,bin_location,expiry_date,quantity,item_id,master_items(item_code,item_description,category)`).order("created_at", { ascending: false });
+    if (error) { console.error("Transfer inventory load error:", error); transferInventory = []; return; }
+    transferInventory = data || [];
+}
+
+function refreshTransferSource() {
+    if (!transferFromWarehouse || !transferItemCode) return;
+    const wh = transferFromWarehouse.value;
+    const bin = transferFromBin.value.trim().toUpperCase();
+    const code = transferItemCode.value.trim().toLowerCase();
+    if (!wh || !code) { transferAvailable.textContent = "0"; transferExpiry.value = ""; return; }
+    const rows = transferInventory.filter(r => (r.warehouse_location || "") === wh && (!bin || r.bin_location === bin) && ((r.master_items?.item_code || "").toLowerCase() === code));
+    const total = rows.reduce((sum, r) => sum + Number(r.quantity || 0), 0);
+    transferAvailable.textContent = total.toLocaleString();
+    const expiries = [...new Set(rows.map(r => r.expiry_date).filter(Boolean))];
+    transferExpiry.value = expiries.length === 1 ? expiries[0] : "";
+    if (expiries.length > 1) showMessage(transferMessage, "Multiple expiry dates exist for this item/source. Select the item/bin more specifically.", "error");
+    else clearMessage(transferMessage);
+}
+
+async function executeStockTransfer() {
+    if (!isAdmin()) return;
+    clearMessage(transferMessage);
+    transferResult.classList.add("hidden");
+    const fromWh = transferFromWarehouse.value;
+    const fromBin = transferFromBin.value.trim().toUpperCase();
+    const toWh = transferToWarehouse.value;
+    const toBin = transferToBin.value.trim().toUpperCase();
+    const itemCodeValue = transferItemCode.value.trim();
+    const qty = Number(transferQuantity.value);
+    const ref = transferReference.value.trim();
+
+    if (!fromWh || !fromBin || !toWh || !toBin || !itemCodeValue || !transferExpiry.value || !ref || !qty || qty <= 0) { showMessage(transferMessage, "Please complete FROM, TO, Item, Expiry, Transfer Quantity, and Reference No.", "error"); return; }
+    if (!ALL_BINS.includes(fromBin) || !ALL_BINS.includes(toBin)) { showMessage(transferMessage, "Invalid Bin Location. Valid range is A1-001 to I5-027.", "error"); return; }
+    if (fromWh === toWh && fromBin === toBin) { showMessage(transferMessage, "FROM and TO cannot be the same warehouse/bin.", "error"); return; }
+
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) { showMessage(transferMessage, "Your session has expired. Please login again.", "error"); return; }
+
+    transferStockBtn.disabled = true; transferStockBtn.textContent = "TRANSFERRING...";
+    try {
+        await loadTransferInventory();
+        const sourceRows = transferInventory.filter(r => (r.warehouse_location || "") === fromWh && r.bin_location === fromBin && (r.master_items?.item_code || "").toLowerCase() === itemCodeValue.toLowerCase() && r.expiry_date === transferExpiry.value && Number(r.quantity || 0) > 0);
+        const available = sourceRows.reduce((sum, r) => sum + Number(r.quantity || 0), 0);
+        if (available < qty) throw new Error(`Insufficient stock. Available: ${available.toLocaleString()}.`);
+        let remaining = qty;
+        for (const row of sourceRows) {
+            if (remaining <= 0) break;
+            const take = Math.min(Number(row.quantity || 0), remaining);
+            const { error } = await supabaseClient.from("inventory").update({ quantity: Number(row.quantity || 0) - take }).eq("id", row.id);
+            if (error) throw error;
+            remaining -= take;
+        }
+        const destination = transferInventory.find(r => (r.warehouse_location || "") === toWh && r.bin_location === toBin && r.item_id === sourceRows[0].item_id && r.expiry_date === transferExpiry.value);
+        if (destination) {
+            const { error } = await supabaseClient.from("inventory").update({ quantity: Number(destination.quantity || 0) + qty }).eq("id", destination.id);
+            if (error) throw error;
+        } else {
+            const { error } = await supabaseClient.from("inventory").insert({ item_id: sourceRows[0].item_id, warehouse_location: toWh, bin_location: toBin, expiry_date: transferExpiry.value, quantity: qty, created_by: user.id });
+            if (error) throw error;
+        }
+        const { error: txError } = await supabaseClient.from("inventory_transactions").insert([
+            { item_id: sourceRows[0].item_id, transaction_type: "TRANSFER_OUT", warehouse_location: fromWh, bin_location: fromBin, expiry_date: transferExpiry.value, quantity_change: -qty, reference_no: ref, created_by: user.id },
+            { item_id: sourceRows[0].item_id, transaction_type: "TRANSFER_IN", warehouse_location: toWh, bin_location: toBin, expiry_date: transferExpiry.value, quantity_change: qty, reference_no: ref, created_by: user.id }
+        ]);
+        if (txError) throw txError;
+        showMessage(transferMessage, "Stock transfer completed successfully.", "success");
+        transferResult.textContent = `${qty.toLocaleString()} unit(s) transferred: ${fromWh} / ${fromBin} → ${toWh} / ${toBin} | Ref: ${ref}`;
+        transferResult.classList.remove("hidden");
+        await loadInventory(); await loadInventorySummary(); await loadTransferInventory(); refreshTransferSource();
+        transferQuantity.value = "";
+    } catch (error) {
+        console.error("Stock transfer error:", error);
+        showMessage(transferMessage, "Transfer failed: " + (error.message || "Unknown error"), "error");
+    } finally {
+        transferStockBtn.disabled = false; transferStockBtn.textContent = "🔄 TRANSFER STOCK";
+    }
+}
+
+function clearTransferForm() {
+    transferFromWarehouse.value = ""; transferFromBin.value = ""; transferItemSearch.value = ""; transferItemCode.value = ""; transferItemDescription.value = ""; transferExpiry.value = ""; transferAvailable.textContent = "0"; transferToWarehouse.value = ""; transferToBin.value = ""; transferQuantity.value = ""; transferReference.value = ""; clearMessage(transferMessage); transferResult.classList.add("hidden");
+}
 
 // =====================================================
 // LOGIN
@@ -320,6 +536,8 @@ async function logout() {
     loginSection.classList.remove("hidden");
 
     userEmail.textContent = "Not logged in";
+    currentUserRole = "admin";
+    if (userRoleBadge) { userRoleBadge.textContent = ""; userRoleBadge.classList.add("hidden"); userRoleBadge.classList.remove("admin", "viewer"); }
 
     emailInput.value = "";
     passwordInput.value = "";
@@ -348,13 +566,16 @@ async function checkLogin() {
 }
 
 
-function showApplication(user) {
+async function showApplication(user) {
 
     loginSection.classList.add("hidden");
     appSection.classList.remove("hidden");
 
     userEmail.textContent =
         user.email || "Logged in";
+
+    await loadUserRole(user.id);
+    applyRolePermissions();
 
 
     loadMasterlist();
@@ -1161,6 +1382,8 @@ window.removePendingInventory =
 
 async function saveAllInventory() {
 
+    if (!isAdmin()) return;
+
     clearMessage(inventoryMessage);
 
 
@@ -1453,6 +1676,68 @@ async function loadInventory() {
 
 
 // =====================================================
+// DOWNLOAD CURRENT INVENTORY
+// =====================================================
+
+function downloadCurrentInventory() {
+
+    if (!currentInventoryData.length) {
+        alert("No current inventory data to download.");
+        return;
+    }
+
+    const location = inventoryLocationFilter
+        ? inventoryLocationFilter.value.trim().toLowerCase()
+        : "";
+
+    const search = inventorySearch
+        ? inventorySearch.value.trim().toLowerCase()
+        : "";
+
+    const filtered = currentInventoryData.filter(row => {
+        const item = row.master_items || {};
+        const rowLocation = String(row.warehouse_location || "").toLowerCase();
+        const code = String(item.item_code || "").toLowerCase();
+        const description = String(item.item_description || "").toLowerCase();
+
+        return (!location || rowLocation === location) &&
+               (!search || code.includes(search) || description.includes(search));
+    });
+
+    if (!filtered.length) {
+        alert("No inventory records match the current filters.");
+        return;
+    }
+
+    const exportRows = filtered.map(row => {
+        const item = row.master_items || {};
+        return {
+            "Item Code": item.item_code || "",
+            "Description": item.item_description || "",
+            "Category": item.category || "",
+            "Warehouse": row.warehouse_location || "",
+            "Bin": row.bin_location || "",
+            "Expiry Date": row.expiry_date || "",
+            "Quantity": Number(row.quantity || 0)
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Current Inventory");
+
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `Current_Inventory_${today}.xlsx`);
+}
+
+window.downloadCurrentInventory = downloadCurrentInventory;
+
+if (downloadInventoryBtn) {
+    downloadInventoryBtn.addEventListener("click", downloadCurrentInventory);
+}
+
+
+// =====================================================
 // CURRENT INVENTORY FILTERS
 // =====================================================
 
@@ -1557,6 +1842,12 @@ function renderInventoryTable(data) {
             <td>${escapeHtml(row.bin_location || "")}</td>
             <td>${formatDate(row.expiry_date)}</td>
             <td>${Number(row.quantity || 0).toLocaleString()}</td>
+            <td class="admin-only">
+                ${isAdmin() ? `<div class="action-buttons">
+                    <button type="button" class="edit-btn" onclick="openEditInventory('${row.id}')">✏️ Edit</button>
+                    <button type="button" class="delete-btn" onclick="deleteInventory('${row.id}')">🗑️ Delete</button>
+                </div>` : ""}
+            </td>
         `;
 
         inventoryTableBody.appendChild(tr);
@@ -1565,6 +1856,128 @@ function renderInventoryTable(data) {
 
 }
 
+
+// =====================================================
+// EDIT / DELETE CURRENT INVENTORY
+// =====================================================
+
+function populateEditItemOptions(selectedItemId) {
+    if (!editItemCode) return;
+
+    editItemCode.innerHTML = masterItems.map(item =>
+        `<option value="${escapeHtml(item.id)}">${escapeHtml(item.item_code || "")}</option>`
+    ).join("");
+
+    editItemCode.value = selectedItemId || "";
+    updateEditItemDescription();
+}
+
+function updateEditItemDescription() {
+    if (!editItemDescription || !editItemCode) return;
+    const item = masterItems.find(x => String(x.id) === String(editItemCode.value));
+    editItemDescription.value = item ? (item.item_description || "") : "";
+}
+
+function openEditInventory(id) {
+    if (!isAdmin()) return;
+    const row = currentInventoryData.find(x => String(x.id) === String(id));
+    if (!row) return;
+
+    populateEditItemOptions(row.item_id);
+    editInventoryId.value = row.id;
+    editWarehouse.value = row.warehouse_location || "";
+    editBin.value = row.bin_location || "";
+    editExpiry.value = row.expiry_date || "";
+    editQuantity.value = row.quantity ?? 0;
+    clearMessage(editInventoryMessage);
+    editInventoryModal.classList.remove("hidden");
+}
+
+function closeEditInventory() {
+    if (editInventoryModal) editInventoryModal.classList.add("hidden");
+}
+
+async function saveEditedInventory() {
+    if (!isAdmin()) return;
+
+    const id = editInventoryId.value;
+    const itemId = editItemCode.value;
+    const qty = Number(editQuantity.value);
+
+    if (!id || !itemId || !editWarehouse.value || !editBin.value.trim() || !editExpiry.value || !Number.isFinite(qty) || qty < 0) {
+        showMessage(editInventoryMessage, "Please complete all fields with valid values.", "error");
+        return;
+    }
+
+    saveEditInventoryBtn.disabled = true;
+    saveEditInventoryBtn.textContent = "SAVING...";
+
+    try {
+        const { error } = await supabaseClient
+            .from("inventory")
+            .update({
+                item_id: itemId,
+                warehouse_location: editWarehouse.value,
+                bin_location: editBin.value.trim().toUpperCase(),
+                expiry_date: editExpiry.value,
+                quantity: qty
+            })
+            .eq("id", id);
+
+        if (error) throw error;
+
+        closeEditInventory();
+        await loadInventory();
+        await loadInventorySummary();
+        alert("Inventory updated successfully.");
+    } catch (error) {
+        console.error("Edit inventory error:", error);
+        showMessage(editInventoryMessage, "Update failed: " + (error.message || "Unknown error"), "error");
+    } finally {
+        saveEditInventoryBtn.disabled = false;
+        saveEditInventoryBtn.textContent = "💾 SAVE CHANGES";
+    }
+}
+
+async function deleteInventory(id) {
+    if (!isAdmin()) return;
+    const row = currentInventoryData.find(x => String(x.id) === String(id));
+    if (!row) return;
+
+    const item = row.master_items || {};
+    const confirmed = window.confirm(
+        `Delete this inventory record?\n\n${item.item_code || "Item"} | ${row.warehouse_location || ""} | ${row.bin_location || ""} | Qty: ${row.quantity || 0}\n\nThis deletes the inventory record only. Transaction history is preserved.`
+    );
+    if (!confirmed) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from("inventory")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
+
+        await loadInventory();
+        await loadInventorySummary();
+        alert("Inventory record deleted successfully.");
+    } catch (error) {
+        console.error("Delete inventory error:", error);
+        alert("Delete failed: " + (error.message || "Unknown error") + "\n\nCheck your Supabase DELETE/RLS policy.");
+    }
+}
+
+window.openEditInventory = openEditInventory;
+window.deleteInventory = deleteInventory;
+
+if (editItemCode) editItemCode.addEventListener("change", updateEditItemDescription);
+if (closeEditModalBtn) closeEditModalBtn.addEventListener("click", closeEditInventory);
+if (saveEditInventoryBtn) saveEditInventoryBtn.addEventListener("click", saveEditedInventory);
+if (editInventoryModal) {
+    editInventoryModal.addEventListener("click", event => {
+        if (event.target === editInventoryModal) closeEditInventory();
+    });
+}
 
 // =====================================================
 // REFRESH / FILTER / RESET CURRENT INVENTORY
@@ -1599,6 +2012,8 @@ if (inventorySearch) {
 
 
 async function resetInventoryData() {
+
+    if (!isAdmin()) return;
 
     const confirmed = window.confirm(
         "RESET INVENTORY DATA?\n\n" +
@@ -2017,6 +2432,8 @@ function setupMasterlist() {
 
 
 async function uploadMasterlist() {
+
+    if (!isAdmin()) return;
 
     clearMessage(masterlistMessage);
 
