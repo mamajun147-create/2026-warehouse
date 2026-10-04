@@ -729,7 +729,6 @@ async function loadMasterlist() {
 
 }
 
-
 // =====================================================
 // MASTERLIST TABLE
 // =====================================================
@@ -986,6 +985,11 @@ function generateBinLocations() {
 
     }
 
+
+       for (let rackLetter = 65; rackLetter <= 71; rackLetter++) {
+        const letter = String.fromCharCode(rackLetter);
+        bins.push(`${letter}1-OVERFLOW`);
+    }
 
     return bins;
 
