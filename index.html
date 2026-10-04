@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NCCI WAREHOUSE INVENTORY</title>
+<title>WAREHOUSE INVENTORY</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="topbar">
-  <div><h1>📦 NCCI WAREHOUSE INVENTORY</h1><p>Junry System</p></div>
+  <div><h1>📦 WAREHOUSE INVENTORY</h1><p>Online Inventory Management System</p></div>
   <div class="user-area"><span id="userEmail">Not logged in</span><span id="userRoleBadge" class="role-badge hidden"></span><button id="logoutBtn" class="logout-btn">Logout</button></div>
 </header>
 
@@ -110,7 +110,7 @@
   </div></section>
 
   <section id="currentStockSection" class="system-section hidden"><div class="card">
-    <div class="section-header"><div><h2>📊 Current Inventory</h2><p>Search item/description and filter by warehouse location.</p></div><div class="button-row compact-actions"><button id="refreshInventoryBtn" class="secondary-btn">🔄 Refresh</button><button id="downloadInventoryBtn" class="secondary-btn">📥 Download Excel</button><button id="resetInventoryBtn" class="danger-btn">🗑️ RESET INVENTORY</button></div></div>
+    <div class="section-header"><div><h2>📊 Current Inventory</h2><p>Search item/description and filter by warehouse location.</p></div><div class="button-row compact-actions"><button id="refreshInventoryBtn" class="secondary-btn">🔄 Refresh</button><button id="resetInventoryBtn" class="danger-btn">🗑️ RESET INVENTORY</button></div></div>
     <div class="form-grid inventory-filter-grid">
       <div class="form-group"><label for="inventoryLocationFilter">Warehouse / Location</label><select id="inventoryLocationFilter"><option value="">All Locations</option></select></div>
       <div class="form-group"><label for="inventorySearch">Search Item Code / Description</label><input type="text" id="inventorySearch" placeholder="Type item code or description..."></div>
