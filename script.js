@@ -115,6 +115,9 @@ const inventoryTableBody =
 const refreshInventoryBtn =
     document.getElementById("refreshInventoryBtn");
 
+const downloadInventoryBtn =
+    document.getElementById("downloadInventoryBtn");
+
 const inventoryLocationFilter =
     document.getElementById("inventoryLocationFilter");
 
@@ -650,8 +653,10 @@ function setupBeginningInventory() {
     });
 
 }
+
+
 // =====================================================
-// BEGINNING INVENTORY
+// LOAD MASTERLIST FROM SUPABASE
 // =====================================================
 
 async function loadMasterlist() {
@@ -686,7 +691,7 @@ async function loadMasterlist() {
                 break;
             }
 
-            allItems = allItems.concat(data);
+            allItems.push(...data);
 
             if (data.length < batchSize) {
                 break;
@@ -698,14 +703,14 @@ async function loadMasterlist() {
         masterItems = allItems;
 
         console.log(
-            "TOTAL MASTERLIST:",
+            "TOTAL MASTERLIST LOADED:",
             masterItems.length
         );
 
         console.log(
-            "ITNES COUNT:",
+            "TOTAL ITNES:",
             masterItems.filter(item =>
-                (item.item_code || "")
+                String(item.item_code || "")
                     .toUpperCase()
                     .startsWith("ITNES")
             ).length
@@ -721,7 +726,9 @@ async function loadMasterlist() {
         );
 
     }
+
 }
+
 
 // =====================================================
 // MASTERLIST TABLE
@@ -1705,6 +1712,68 @@ async function loadInventory() {
     populateInventoryLocationFilter(currentInventoryData);
     applyInventoryFilters();
 
+}
+
+
+// =====================================================
+// DOWNLOAD CURRENT INVENTORY
+// =====================================================
+
+function downloadCurrentInventory() {
+
+    if (!currentInventoryData.length) {
+        alert("No current inventory data to download.");
+        return;
+    }
+
+    const location = inventoryLocationFilter
+        ? inventoryLocationFilter.value.trim().toLowerCase()
+        : "";
+
+    const search = inventorySearch
+        ? inventorySearch.value.trim().toLowerCase()
+        : "";
+
+    const filtered = currentInventoryData.filter(row => {
+        const item = row.master_items || {};
+        const rowLocation = String(row.warehouse_location || "").toLowerCase();
+        const code = String(item.item_code || "").toLowerCase();
+        const description = String(item.item_description || "").toLowerCase();
+
+        return (!location || rowLocation === location) &&
+               (!search || code.includes(search) || description.includes(search));
+    });
+
+    if (!filtered.length) {
+        alert("No inventory records match the current filters.");
+        return;
+    }
+
+    const exportRows = filtered.map(row => {
+        const item = row.master_items || {};
+        return {
+            "Item Code": item.item_code || "",
+            "Description": item.item_description || "",
+            "Category": item.category || "",
+            "Warehouse": row.warehouse_location || "",
+            "Bin": row.bin_location || "",
+            "Expiry Date": row.expiry_date || "",
+            "Quantity": Number(row.quantity || 0)
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Current Inventory");
+
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `Current_Inventory_${today}.xlsx`);
+}
+
+window.downloadCurrentInventory = downloadCurrentInventory;
+
+if (downloadInventoryBtn) {
+    downloadInventoryBtn.addEventListener("click", downloadCurrentInventory);
 }
 
 
