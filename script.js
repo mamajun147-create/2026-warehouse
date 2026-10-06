@@ -336,7 +336,7 @@ function setupMenu() {
     }
 
 // =====================================================
-// STOCK TRANSFER
+// BIN INPUT
 // =====================================================
 
 function setupBinInput(input, suggestionsBox) {
