@@ -335,7 +335,78 @@ function setupMenu() {
         });
     }
 
-    
+// =====================================================
+// STOCK TRANSFER
+// =====================================================
+
+function setupBinInput(input, suggestionsBox) {
+    // function setupBinInput(input, suggestionsBox) {
+    if (!input || !suggestionsBox) return;
+
+    input.addEventListener("input", () => {
+        const typed = input.value.trim().toUpperCase();
+
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.classList.add("hidden");
+
+        if (!typed) return;
+
+        const matches = ALL_BINS.filter(bin =>
+            bin.toUpperCase().includes(typed)
+        ).slice(0, 20);
+
+        if (matches.length === 0) return;
+
+        matches.forEach(bin => {
+            const option = document.createElement("div");
+            option.textContent = bin;
+            option.className = "suggestion-item";
+
+            option.addEventListener("click", () => {
+                input.value = bin;
+                suggestionsBox.innerHTML = "";
+                suggestionsBox.classList.add("hidden");
+
+                input.dispatchEvent(new Event("change"));
+            });
+
+            suggestionsBox.appendChild(option);
+        });
+
+        suggestionsBox.classList.remove("hidden");
+    });
+
+    input.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+
+            const typed = input.value.trim().toUpperCase();
+
+            if (ALL_BINS.includes(typed)) {
+                input.value = typed;
+                suggestionsBox.innerHTML = "";
+                suggestionsBox.classList.add("hidden");
+
+                input.dispatchEvent(new Event("change"));
+            }
+        }
+
+        if (event.key === "Escape") {
+            suggestionsBox.innerHTML = "";
+            suggestionsBox.classList.add("hidden");
+        }
+    });
+
+    document.addEventListener("click", event => {
+        if (
+            event.target !== input &&
+            !suggestionsBox.contains(event.target)
+        ) {
+            suggestionsBox.innerHTML = "";
+            suggestionsBox.classList.add("hidden");
+        }
+    });
+}
 
 // =====================================================
 // STOCK TRANSFER
@@ -347,8 +418,8 @@ function fillTransferWarehouses() {
         select.innerHTML = '<option value="">Select Warehouse</option>';
         ["WMECOM", "WMLAZ", "WMSHOPEE", "WMAIN", "WMBBD", "OTHER"].forEach(w => {
             select.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`);
-        });
-    });
+        })
+    }); 
 }
 
 function setupTransfer() {
