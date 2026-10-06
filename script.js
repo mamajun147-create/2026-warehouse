@@ -144,6 +144,29 @@ const refreshSummaryBtn =
 const resetSummaryBtn =
     document.getElementById("resetSummaryBtn");
 
+
+// Outbound Upload
+
+const outboundFile =
+    document.getElementById("outboundFile");
+
+const previewOutboundBtn =
+    document.getElementById("previewOutboundBtn");
+
+const outboundTableBody =
+    document.getElementById("outboundTableBody");
+
+const processOutboundBtn =
+    document.getElementById("processOutboundBtn");
+
+const outboundMessage =
+    document.getElementById("outboundMessage");
+  
+
+    let pendingOutbound = [];
+
+    let outboundUploadInitialized = false;
+
 // Stock Transfer
 let transferInventory = [];
 const transferFromWarehouse = document.getElementById("transferFromWarehouse");
@@ -226,11 +249,11 @@ function applyRolePermissions() {
     const adminElements = document.querySelectorAll(".admin-only");
     adminElements.forEach(el => el.classList.toggle("hidden", !isAdmin()));
 
-    const adminMenuSections = ["inventorySection", "transferSection"];
-    document.querySelectorAll(".menu-btn").forEach(btn => {
-        const restricted = adminMenuSections.includes(btn.dataset.section);
-        btn.classList.toggle("hidden", restricted && !isAdmin());
-    });
+    const adminMenuSections = [
+    "inventorySection",
+    "transferSection",
+    "outboundSection"
+];
 
     if (masterlistFile) masterlistFile.classList.toggle("hidden", !isAdmin());
     if (uploadMasterlistBtn) uploadMasterlistBtn.classList.toggle("hidden", !isAdmin());
@@ -295,6 +318,9 @@ function setupMenu() {
                 await loadInventory();
             }
 
+            if (targetSection === "outboundSection") {
+                 setupOutboundUpload();
+            } 
 
             if (targetSection === "summarySection") {
                 await loadInventorySummary();
@@ -304,11 +330,11 @@ function setupMenu() {
                 await prepareTransferSection();
             }
 
+        
+
         });
-
-    });
-
 }
+
 
 
 // =====================================================
@@ -2815,3 +2841,583 @@ function formatDate(dateValue) {
     );
 
 }
+
+// =====================================================
+// OUTBOUND UPLOAD
+// =====================================================
+
+function setupOutboundUpload() {
+
+    if (outboundUploadInitialized) return;
+
+    if (!outboundFile || !previewOutboundBtn) {
+        console.warn("Outbound Upload elements not found.");
+        return;
+    }
+
+    outboundUploadInitialized = true;
+
+    previewOutboundBtn.addEventListener("click", async () => {
+
+        if (!isAdmin()) {
+            showOutboundMessage(
+                "Only admin users can process outbound transactions.",
+                "error"
+            );
+            return;
+        }
+
+        const file = outboundFile.files[0];
+
+        if (!file) {
+            showOutboundMessage(
+                "Please select an Excel file first.",
+                "error"
+            );
+            return;
+        }
+
+        try {
+
+            showOutboundMessage(
+                "Reading outbound file...",
+                "info"
+            );
+
+            const arrayBuffer = await file.arrayBuffer();
+
+            const workbook = XLSX.read(arrayBuffer, {
+                type: "array"
+            });
+
+            const firstSheet =
+                workbook.Sheets[workbook.SheetNames[0]];
+
+            const rows =
+                XLSX.utils.sheet_to_json(firstSheet, {
+                    defval: ""
+                });
+
+            if (!rows.length) {
+                showOutboundMessage(
+                    "The Excel file is empty.",
+                    "error"
+                );
+                return;
+            }
+
+            pendingOutbound = rows.map(row => {
+
+                const itemCode =
+                    String(row["Item Code"] || "")
+                        .trim()
+                        .toUpperCase();
+
+                const warehouse =
+                    String(row["Warehouse"] || "")
+                        .trim()
+                        .toUpperCase();
+
+                const bin =
+                    String(row["Bin"] || "")
+                        .trim()
+                        .toUpperCase();
+
+                const qty =
+                    Number(row["Quantity"]);
+
+                const referenceNo =
+                    String(
+                        row["Reference No."] ||
+                        row["Reference No"] ||
+                        ""
+                    ).trim();
+
+                return {
+                    itemCode,
+                    warehouse,
+                    bin,
+                    quantity: qty,
+                    referenceNo
+                };
+
+            });
+
+            renderOutboundPreview();
+
+            showOutboundMessage(
+                `${pendingOutbound.length} outbound row(s) loaded. Please review before processing.`,
+                "success"
+            );
+
+        } catch (error) {
+
+            console.error(
+                "Outbound preview error:",
+                error
+            );
+
+            showOutboundMessage(
+                "Unable to read outbound file: " +
+                (error.message || "Unknown error"),
+                "error"
+            );
+
+        }
+
+    });
+
+}
+
+
+// =====================================================
+// OUTBOUND PREVIEW
+// =====================================================
+
+function renderOutboundPreview() {
+
+    if (!outboundTableBody) return;
+
+    outboundTableBody.innerHTML = "";
+
+    if (!pendingOutbound.length) {
+
+        outboundTableBody.innerHTML = `
+            <tr>
+                <td colspan="5">
+                    No outbound data found.
+                </td>
+            </tr>
+        `;
+
+        return;
+    }
+
+    pendingOutbound.forEach(row => {
+
+        const errorMessage =
+            validateOutboundRow(row);
+
+        const tr =
+            document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${escapeHtml(row.itemCode)}</td>
+            <td>${escapeHtml(row.warehouse)}</td>
+            <td>${escapeHtml(row.bin)}</td>
+            <td>${escapeHtml(String(row.quantity))}</td>
+            <td>${escapeHtml(row.referenceNo)}</td>
+        `;
+
+        if (errorMessage) {
+            tr.classList.add("error-row");
+            tr.title = errorMessage;
+        } else {
+            tr.title = "VALID";
+        }
+
+        outboundTableBody.appendChild(tr);
+
+    });
+
+}
+
+
+// =====================================================
+// OUTBOUND MESSAGE
+// =====================================================
+
+function showOutboundMessage(message, type = "") {
+
+    if (!outboundMessage) return;
+
+    outboundMessage.textContent = message;
+
+    outboundMessage.className = "message";
+
+    if (type) {
+        outboundMessage.classList.add(type);
+    }
+
+}
+
+
+// =====================================================
+// VALIDATE OUTBOUND ROW
+// =====================================================
+
+function validateOutboundRow(row) {
+
+    if (!row.itemCode) {
+        return "Missing Item Code";
+    }
+
+    if (!row.warehouse) {
+        return "Missing Warehouse";
+    }
+
+    if (!row.bin) {
+        return "Missing Bin";
+    }
+
+    if (!Number.isFinite(row.quantity) || row.quantity <= 0) {
+        return "Invalid Quantity";
+    }
+
+    if (!row.referenceNo) {
+        return "Missing Reference No.";
+    }
+
+    if (!ALL_BINS.includes(row.bin)) {
+        return "Invalid Bin";
+    }
+
+    const itemExists =
+        masterItems.some(item =>
+            String(item.item_code || "").toUpperCase() === row.itemCode
+        );
+
+    if (!itemExists) {
+        return "Item Code not found in Masterlist";
+    }
+
+    return "";
+
+}
+
+
+// =====================================================
+// PROCESS OUTBOUND
+// =====================================================
+
+async function processOutbound() {
+
+    if (!isAdmin()) {
+
+        showOutboundMessage(
+            "Only admin users can process outbound transactions.",
+            "error"
+        );
+
+        return;
+    }
+
+    if (!pendingOutbound.length) {
+
+        showOutboundMessage(
+            "Please upload and preview an outbound Excel file first.",
+            "error"
+        );
+
+        return;
+    }
+
+    // ---------------------------------------------
+    // Validate all rows first
+    // ---------------------------------------------
+
+    const invalidRows =
+        pendingOutbound
+            .map((row, index) => ({
+                rowNumber: index + 2,
+                error: validateOutboundRow(row)
+            }))
+            .filter(row => row.error);
+
+    if (invalidRows.length > 0) {
+
+        const firstError =
+            invalidRows[0];
+
+        showOutboundMessage(
+            `Cannot process. Excel row ${firstError.rowNumber}: ${firstError.error}`,
+            "error"
+        );
+
+        return;
+    }
+
+    showOutboundMessage(
+        "Validating available inventory...",
+        "info"
+    );
+
+    await loadInventory();
+
+    // ---------------------------------------------
+    // Get current stock
+    // ---------------------------------------------
+
+    const stockMap = {};
+
+    currentInventoryData.forEach(row => {
+
+        const itemCode =
+            String(
+                row.master_items?.item_code || ""
+            ).toUpperCase();
+
+        const warehouse =
+            String(
+                row.warehouse_location || ""
+            ).toUpperCase();
+
+        const bin =
+            String(
+                row.bin_location || ""
+            ).toUpperCase();
+
+        const key =
+            `${itemCode}||${warehouse}||${bin}`;
+
+        if (!stockMap[key]) {
+            stockMap[key] = 0;
+        }
+
+        stockMap[key] +=
+            Number(row.quantity || 0);
+
+    });
+
+    // ---------------------------------------------
+    // Calculate required quantity
+    // ---------------------------------------------
+
+    const requiredMap = {};
+
+    pendingOutbound.forEach(row => {
+
+        const key =
+            `${row.itemCode}||${row.warehouse}||${row.bin}`;
+
+        if (!requiredMap[key]) {
+            requiredMap[key] = 0;
+        }
+
+        requiredMap[key] +=
+            row.quantity;
+
+    });
+
+    // ---------------------------------------------
+    // Check available stock
+    // ---------------------------------------------
+
+    for (const key in requiredMap) {
+
+        const available =
+            stockMap[key] || 0;
+
+        const required =
+            requiredMap[key];
+
+        if (required > available) {
+
+            showOutboundMessage(
+                `Insufficient stock. Required: ${required}, Available: ${available} (${key.replaceAll("||", " / ")})`,
+                "error"
+            );
+
+            return;
+        }
+
+    }
+
+    showOutboundMessage(
+        "Stock validated. Processing outbound...",
+        "info"
+    );
+
+    try {
+
+        // ---------------------------------------------
+        // Get logged-in user
+        // ---------------------------------------------
+
+        const {
+            data: {
+                user
+            }
+        } = await supabaseClient.auth.getUser();
+
+        if (!user) {
+            throw new Error(
+                "Your session has expired. Please login again."
+            );
+        }
+
+        // ---------------------------------------------
+        // Process each outbound row
+        // ---------------------------------------------
+
+        for (const row of pendingOutbound) {
+
+            let remaining =
+                row.quantity;
+
+            const matchingInventory =
+                currentInventoryData
+                    .filter(item => {
+
+                        const itemCode =
+                            String(
+                                item.master_items?.item_code || ""
+                            ).toUpperCase();
+
+                        const warehouse =
+                            String(
+                                item.warehouse_location || ""
+                            ).toUpperCase();
+
+                        const bin =
+                            String(
+                                item.bin_location || ""
+                            ).toUpperCase();
+
+                        return (
+                            itemCode === row.itemCode &&
+                            warehouse === row.warehouse &&
+                            bin === row.bin &&
+                            Number(item.quantity || 0) > 0
+                        );
+
+                    })
+                    .sort((a, b) => {
+
+                        const dateA =
+                            a.expiry_date || "9999-12-31";
+
+                        const dateB =
+                            b.expiry_date || "9999-12-31";
+
+                        return dateA.localeCompare(dateB);
+
+                    });
+
+            // -----------------------------------------
+            // FEFO deduction
+            // -----------------------------------------
+
+            for (const inventoryRow of matchingInventory) {
+
+                if (remaining <= 0) {
+                    break;
+                }
+
+                const available =
+                    Number(
+                        inventoryRow.quantity || 0
+                    );
+
+                if (available <= 0) {
+                    continue;
+                }
+
+                const deduct =
+                    Math.min(
+                        remaining,
+                        available
+                    );
+
+                const newQuantity =
+                    available - deduct;
+
+                // Update inventory
+                const {
+                    error: updateError
+                } = await supabaseClient
+                    .from("inventory")
+                    .update({
+                        quantity: newQuantity
+                    })
+                    .eq("id", inventoryRow.id);
+
+                if (updateError) {
+                    throw updateError;
+                }
+
+                // Save transaction
+                const {
+                    error: transactionError
+                } = await supabaseClient
+                    .from("inventory_transactions")
+                    .insert({
+                        item_id:
+                            inventoryRow.item_id,
+
+                        transaction_type:
+                            "OUTBOUND",
+
+                        warehouse_location:
+                            inventoryRow.warehouse_location,
+
+                        bin_location:
+                            inventoryRow.bin_location,
+
+                        expiry_date:
+                            inventoryRow.expiry_date,
+
+                        quantity_change:
+                            -deduct,
+
+                        reference_no:
+                            row.referenceNo,
+
+                        created_by:
+                            user.id
+                    });
+
+                if (transactionError) {
+                    throw transactionError;
+                }
+
+                remaining -= deduct;
+
+            }
+
+            if (remaining > 0) {
+
+                throw new Error(
+                    `Unable to deduct complete quantity for ${row.itemCode}.`
+                );
+
+            }
+
+        }
+
+        // ---------------------------------------------
+        // SUCCESS
+        // ---------------------------------------------
+
+        pendingOutbound = [];
+
+        outboundFile.value = "";
+
+        if (outboundTableBody) {
+            outboundTableBody.innerHTML = "";
+        }
+
+        showOutboundMessage(
+            "Outbound processed successfully.",
+            "success"
+        );
+
+        await loadInventory();
+
+        await loadInventorySummary();
+
+    } catch (error) {
+
+        console.error(
+            "Outbound processing error:",
+            error
+        );
+
+        showOutboundMessage(
+            `Outbound processing failed: ${error.message || "Unknown error"}`,
+            "error"
+        );
+
+    }
+
+}   
