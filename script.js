@@ -158,6 +158,8 @@ const outboundTableBody =
 
 const processOutboundBtn =
     document.getElementById("processOutboundBtn");
+    const cancelOutboundBtn =
+    document.getElementById("cancelOutboundBtn");
 
 const outboundMessage =
     document.getElementById("outboundMessage");
@@ -2917,578 +2919,819 @@ function formatDate(dateValue) {
 // OUTBOUND UPLOAD
 // =====================================================
 
+function normalizeOutboundDate(value) {
+
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+        return "";
+    }
+
+    // JavaScript Date
+    if (
+        value instanceof Date &&
+        !isNaN(value.getTime())
+    ) {
+
+        const y = value.getFullYear();
+
+        const m =
+            String(value.getMonth() + 1)
+                .padStart(2, "0");
+
+        const d =
+            String(value.getDate())
+                .padStart(2, "0");
+
+        return `${y}-${m}-${d}`;
+    }
+
+
+    // Excel serial date
+    if (
+        typeof value === "number" &&
+        Number.isFinite(value)
+    ) {
+
+        const utcDays =
+            Math.floor(value - 25569);
+
+        const date =
+            new Date(
+                utcDays * 86400 * 1000
+            );
+
+        if (!isNaN(date.getTime())) {
+
+            const y =
+                date.getUTCFullYear();
+
+            const m =
+                String(
+                    date.getUTCMonth() + 1
+                ).padStart(2, "0");
+
+            const d =
+                String(
+                    date.getUTCDate()
+                ).padStart(2, "0");
+
+            return `${y}-${m}-${d}`;
+        }
+    }
+
+
+    const text =
+        String(value).trim();
+
+    if (!text) {
+        return "";
+    }
+
+
+    // YYYY-MM-DD
+    if (
+        /^\d{4}-\d{1,2}-\d{1,2}$/.test(text)
+    ) {
+
+        const [
+            y,
+            m,
+            d
+        ] = text.split("-");
+
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+
+    // MM/DD/YYYY
+    // M/D/YYYY
+    // MM-DD-YYYY
+    // M-D-YYYY
+
+    let match =
+        text.match(
+            /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/
+        );
+
+    if (match) {
+
+        const month =
+            String(match[1])
+                .padStart(2, "0");
+
+        const day =
+            String(match[2])
+                .padStart(2, "0");
+
+        const year =
+            match[3];
+
+        return `${year}-${month}-${day}`;
+    }
+
+
+    const parsed =
+        new Date(text);
+
+    if (!isNaN(parsed.getTime())) {
+
+        const y =
+            parsed.getFullYear();
+
+        const m =
+            String(
+                parsed.getMonth() + 1
+            ).padStart(2, "0");
+
+        const d =
+            String(
+                parsed.getDate()
+            ).padStart(2, "0");
+
+        return `${y}-${m}-${d}`;
+    }
+
+
+    return "";
+}
+
+
+// =====================================================
+// GET OUTBOUND COLUMN
+// =====================================================
+
+function getOutboundColumn(
+    row,
+    names
+) {
+
+    for (const name of names) {
+
+        if (
+            Object.prototype.hasOwnProperty.call(
+                row,
+                name
+            )
+        ) {
+
+            return row[name];
+
+        }
+
+    }
+
+    return "";
+}
+
+
+// =====================================================
+// OUTBOUND TABLE HEADER
+// =====================================================
+
+function setupOutboundTableHeader() {
+
+    if (!outboundTableBody) return;
+
+    const table =
+        outboundTableBody.closest("table");
+
+    if (!table) return;
+
+    const thead =
+        table.querySelector("thead");
+
+    if (!thead) return;
+
+    thead.innerHTML = `
+        <tr>
+            <th>Item Code</th>
+            <th>Warehouse</th>
+            <th>Bin</th>
+            <th>Expiry Date</th>
+            <th>Quantity</th>
+            <th>Reference No.</th>
+            <th>Action</th>
+        </tr>
+    `;
+}
+
+// =====================================================
+// SETUP OUTBOUND UPLOAD
+// =====================================================
+
 function setupOutboundUpload() {
 
-    if (outboundUploadInitialized) return;
+    if (outboundUploadInitialized) {
+        return;
+    }
 
-    if (!outboundFile || !previewOutboundBtn) {
-        console.warn("Outbound Upload elements not found.");
+    if (
+        !outboundFile ||
+        !previewOutboundBtn
+    ) {
+
+        console.warn(
+            "Outbound Upload elements not found."
+        );
+
         return;
     }
 
     outboundUploadInitialized = true;
 
-    previewOutboundBtn.addEventListener("click", async () => {
+    setupOutboundTableHeader();
 
-        if (!isAdmin()) {
-            showOutboundMessage(
-                "Only admin users can process outbound transactions.",
-                "error"
-            );
-            return;
-        }
 
-        const file = outboundFile.files[0];
+    // =================================================
+    // PREVIEW BUTTON
+    // =================================================
 
-        if (!file) {
-            showOutboundMessage(
-                "Please select an Excel file first.",
-                "error"
-            );
-            return;
-        }
+    previewOutboundBtn.addEventListener(
+        "click",
+        async () => {
 
-        try {
+            if (!isAdmin()) {
 
-            showOutboundMessage(
-                "Reading outbound file...",
-                "info"
-            );
-
-            const arrayBuffer = await file.arrayBuffer();
-
-            const workbook = XLSX.read(arrayBuffer, {
-                type: "array"
-            });
-
-            const firstSheet =
-                workbook.Sheets[workbook.SheetNames[0]];
-
-            const rows =
-                XLSX.utils.sheet_to_json(firstSheet, {
-                    defval: ""
-                });
-
-            if (!rows.length) {
                 showOutboundMessage(
-                    "The Excel file is empty.",
+                    "Only admin users can process outbound transactions.",
                     "error"
                 );
+
                 return;
             }
 
-            pendingOutbound = rows.map(row => {
 
-                const itemCode =
-                    String(row["Item Code"] || "")
-                        .trim()
-                        .toUpperCase();
+            const file =
+                outboundFile.files[0];
 
-                const warehouse =
-                    String(row["Warehouse"] || "")
-                        .trim()
-                        .toUpperCase();
 
-                const bin =
-                    String(row["Bin"] || "")
-                        .trim()
-                        .toUpperCase();
+            if (!file) {
 
-                const qty =
-                    Number(row["Quantity"]);
+                showOutboundMessage(
+                    "Please select an Excel file first.",
+                    "error"
+                );
 
-                const referenceNo =
-                    String(
-                        row["Reference No."] ||
-                        row["Reference No"] ||
-                        ""
-                    ).trim();
+                return;
+            }
 
-                return {
-                    itemCode,
-                    warehouse,
-                    bin,
-                    quantity: qty,
-                    referenceNo
-                };
 
-            });
+            try {
 
-            renderOutboundPreview();
+                showOutboundMessage(
+                    "Reading outbound file...",
+                    "info"
+                );
 
-            showOutboundMessage(
-                `${pendingOutbound.length} outbound row(s) loaded. Please review before processing.`,
-                "success"
-            );
 
-        } catch (error) {
+                const arrayBuffer =
+                    await file.arrayBuffer();
 
-            console.error(
-                "Outbound preview error:",
-                error
-            );
 
-            showOutboundMessage(
-                "Unable to read outbound file: " +
-                (error.message || "Unknown error"),
-                "error"
-            );
+                const workbook =
+                    XLSX.read(
+                        arrayBuffer,
+                        {
+                            type: "array",
+                            cellDates: true
+                        }
+                    );
+
+
+                const firstSheet =
+                    workbook.Sheets[
+                        workbook.SheetNames[0]
+                    ];
+
+
+                const rows =
+                    XLSX.utils.sheet_to_json(
+                        firstSheet,
+                        {
+                            defval: "",
+                            raw: true
+                        }
+                    );
+
+
+                if (!rows.length) {
+
+                    showOutboundMessage(
+                        "The Excel file is empty.",
+                        "error"
+                    );
+
+                    return;
+                }
+
+
+                // =====================================
+                // CONVERT EXCEL ROWS
+                // =====================================
+
+                pendingOutbound =
+                    rows.map(row => {
+
+                        const itemCode =
+                            String(
+                                getOutboundColumn(
+                                    row,
+                                    [
+                                        "Item Code",
+                                        "ItemCode",
+                                        "item_code",
+                                        "ITEM CODE",
+                                        "Code"
+                                    ]
+                                ) || ""
+                            )
+                            .trim()
+                            .toUpperCase();
+
+
+                        const warehouse =
+                            String(
+                                getOutboundColumn(
+                                    row,
+                                    [
+                                        "Warehouse",
+                                        "Warehouse Location",
+                                        "warehouse_location",
+                                        "LOCATION"
+                                    ]
+                                ) || ""
+                            )
+                            .trim()
+                            .toUpperCase();
+
+
+                        const bin =
+                            String(
+                                getOutboundColumn(
+                                    row,
+                                    [
+                                        "Bin",
+                                        "Bin Location",
+                                        "bin_location",
+                                        "BIN"
+                                    ]
+                                ) || ""
+                            )
+                            .trim()
+                            .toUpperCase();
+
+
+                        const expiryDate =
+                            normalizeOutboundDate(
+                                getOutboundColumn(
+                                    row,
+                                    [
+                                        "Expiry Date",
+                                        "Expiry",
+                                        "expiry_date",
+                                        "EXPIRY DATE"
+                                    ]
+                                )
+                            );
+
+
+                        const qty =
+                            Number(
+                                getOutboundColumn(
+                                    row,
+                                    [
+                                        "Quantity",
+                                        "Qty",
+                                        "QTY",
+                                        "quantity"
+                                    ]
+                                )
+                            );
+
+
+                        const referenceNo =
+                            String(
+                                getOutboundColumn(
+                                    row,
+                                    [
+                                        "Reference",
+                                        "Reference No.",
+                                        "Reference No",
+                                        "Reference Number",
+                                        "Ref",
+                                        "REF"
+                                    ]
+                                ) || ""
+                            )
+                            .trim();
+
+
+                        return {
+
+                            itemCode,
+
+                            warehouse,
+
+                            bin,
+
+                            expiryDate,
+
+                            quantity: qty,
+
+                            referenceNo
+
+                        };
+
+                    });
+
+
+                // =====================================
+                // SHOW PREVIEW
+                // =====================================
+
+                renderOutboundPreview();
+
+
+                const invalidCount =
+                    pendingOutbound.filter(
+                        row =>
+                            validateOutboundRow(row)
+                    ).length;
+
+
+                if (invalidCount > 0) {
+
+                    showOutboundMessage(
+                        `${pendingOutbound.length} outbound row(s) loaded. ${invalidCount} row(s) need correction before processing.`,
+                        "error"
+                    );
+
+                } else {
+
+                    showOutboundMessage(
+                        `${pendingOutbound.length} outbound row(s) loaded. Please review before processing.`,
+                        "success"
+                    );
+
+                }
+
+            } catch (error) {
+
+                console.error(
+                    "Outbound preview error:",
+                    error
+                );
+
+
+                showOutboundMessage(
+                    "Unable to read outbound file: " +
+                    (
+                        error.message ||
+                        "Unknown error"
+                    ),
+                    "error"
+                );
+
+            }
 
         }
+    );
 
-    });
+
+    // =================================================
+    // PROCESS BUTTON
+    // =================================================
+
+    if (processOutboundBtn) {
+
+        processOutboundBtn.addEventListener(
+            "click",
+            processOutbound
+        );
+
+    }
+
 
 }
 
 
 // =====================================================
-// OUTBOUND PREVIEW
+// OUTBOUND PREVIEW - EDITABLE
 // =====================================================
 
 function renderOutboundPreview() {
-
     if (!outboundTableBody) return;
 
     outboundTableBody.innerHTML = "";
 
-    if (!pendingOutbound.length) {
+    if (!pendingOutbound || pendingOutbound.length === 0) {
+        outboundTableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="empty-state">
+                    No outbound data loaded.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    pendingOutbound.forEach((row, index) => {
+
+        const validation = validateOutboundRow(row);
+        const isValid = validation === "";
+
+        const tr = document.createElement("tr");
+
+        if (!isValid) {
+            tr.classList.add("invalid-row");
+        }
+
+        tr.innerHTML = `
+            <td>
+                <input
+                    type="text"
+                    value="${escapeHtml(row.itemCode || "")}"
+                    data-field="itemCode"
+                    data-index="${index}"
+                    class="outbound-edit-input"
+                >
+            </td>
+
+            <td>
+                <input
+                    type="text"
+                    value="${escapeHtml(row.warehouse || "")}"
+                    data-field="warehouse"
+                    data-index="${index}"
+                    class="outbound-edit-input"
+                >
+            </td>
+
+            <td>
+                <input
+                    type="text"
+                    value="${escapeHtml(row.bin || "")}"
+                    data-field="bin"
+                    data-index="${index}"
+                    class="outbound-edit-input"
+                >
+            </td>
+
+            <td>
+                <input
+                    type="date"
+                    value="${escapeHtml(row.expiryDate || "")}"
+                    data-field="expiryDate"
+                    data-index="${index}"
+                    class="outbound-edit-input"
+                >
+            </td>
+
+            <td>
+                <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value="${Number.isFinite(row.quantity) ? row.quantity : ""}"
+                    data-field="quantity"
+                    data-index="${index}"
+                    class="outbound-edit-input"
+                >
+            </td>
+
+            <td>
+                <input
+                    type="text"
+                    value="${escapeHtml(row.referenceNo || "")}"
+                    data-field="referenceNo"
+                    data-index="${index}"
+                    class="outbound-edit-input"
+                >
+            </td>
+
+            <td>
+                <button
+                    type="button"
+                    class="outbound-remove-btn"
+                    data-remove-index="${index}"
+                >
+                    🗑 Remove
+                </button>
+            </td>
+        `;
+
+        outboundTableBody.appendChild(tr);
+    });
+
+    setupOutboundEditing();
+}
+
+
+// =====================================================
+// OUTBOUND EDITING
+// =====================================================
+
+function setupOutboundEditing() {
+
+    if (!outboundTableBody) return;
+
+    const inputs =
+        outboundTableBody.querySelectorAll(
+            ".outbound-edit-input"
+        );
+
+    inputs.forEach(input => {
+
+        input.addEventListener("input", function () {
+
+            const index =
+                Number(this.dataset.index);
+
+            const field =
+                this.dataset.field;
+
+            if (
+                !pendingOutbound[index] ||
+                !field
+            ) {
+                return;
+            }
+
+            let value = this.value;
+
+            if (field === "itemCode") {
+                value = value
+                    .trim()
+                    .toUpperCase();
+            }
+
+            if (field === "warehouse") {
+                value = value
+                    .trim()
+                    .toUpperCase();
+            }
+
+            if (field === "bin") {
+                value = value
+                    .trim()
+                    .toUpperCase();
+            }
+
+            if (field === "expiryDate") {
+                value =
+                    normalizeOutboundDate(value);
+            }
+
+            if (field === "quantity") {
+                value = Number(value);
+            }
+
+            if (field === "referenceNo") {
+                value = value.trim();
+            }
+
+            pendingOutbound[index][field] =
+                value;
+
+            refreshOutboundRowStatus(index);
+        });
+
+    });
+
+
+    const removeButtons =
+        outboundTableBody.querySelectorAll(
+            ".outbound-remove-btn"
+        );
+
+    removeButtons.forEach(button => {
+
+        button.addEventListener("click", function () {
+
+            const index =
+                Number(
+                    this.dataset.removeIndex
+                );
+
+            removeOutboundRow(index);
+
+        });
+
+    });
+}
+
+
+// =====================================================
+// REFRESH ROW VALIDATION
+// =====================================================
+
+function refreshOutboundRowStatus(index) {
+
+    if (!outboundTableBody) return;
+
+    const rows =
+        outboundTableBody.querySelectorAll("tr");
+
+    const row =
+        rows[index];
+
+    if (!row) return;
+
+    const validation =
+        validateOutboundRow(
+            pendingOutbound[index]
+        );
+
+    if (validation === "") {
+        row.classList.remove("invalid-row");
+    } else {
+        row.classList.add("invalid-row");
+    }
+}
+
+
+// =====================================================
+// REMOVE OUTBOUND ROW
+// =====================================================
+
+function removeOutboundRow(index) {
+
+    if (
+        !pendingOutbound ||
+        !pendingOutbound[index]
+    ) {
+        return;
+    }
+
+    const confirmed =
+        confirm(
+            "Remove this outbound row?"
+        );
+
+    if (!confirmed) {
+        return;
+    }
+
+    pendingOutbound.splice(index, 1);
+
+    renderOutboundPreview();
+
+    if (pendingOutbound.length === 0) {
+
+        showOutboundMessage(
+            "All outbound rows were removed.",
+            "info"
+        );
+
+    } else {
+
+        showOutboundMessage(
+            `${pendingOutbound.length} outbound row(s) remaining.`,
+            "info"
+        );
+
+    }
+}
+
+
+// =====================================================
+// CANCEL OUTBOUND UPLOAD
+// =====================================================
+
+function cancelOutboundUpload() {
+
+    const confirmed =
+        confirm(
+            "Cancel this outbound upload?\n\nNo inventory will be changed."
+        );
+
+    if (!confirmed) {
+        return;
+    }
+
+    pendingOutbound = [];
+
+    if (outboundFile) {
+        outboundFile.value = "";
+    }
+
+    if (outboundTableBody) {
 
         outboundTableBody.innerHTML = `
             <tr>
-                <td colspan="5">
-                    No outbound data found.
+                <td colspan="7" class="empty-state">
+                    No outbound data loaded.
                 </td>
             </tr>
         `;
 
-        return;
-    }
-
-    pendingOutbound.forEach(row => {
-
-        const errorMessage =
-            validateOutboundRow(row);
-
-        const tr =
-            document.createElement("tr");
-
-        tr.innerHTML = `
-            <td>${escapeHtml(row.itemCode)}</td>
-            <td>${escapeHtml(row.warehouse)}</td>
-            <td>${escapeHtml(row.bin)}</td>
-            <td>${escapeHtml(String(row.quantity))}</td>
-            <td>${escapeHtml(row.referenceNo)}</td>
-        `;
-
-        if (errorMessage) {
-            tr.classList.add("error-row");
-            tr.title = errorMessage;
-        } else {
-            tr.title = "VALID";
-        }
-
-        outboundTableBody.appendChild(tr);
-
-    });
-
-}
-
-
-// =====================================================
-// OUTBOUND MESSAGE
-// =====================================================
-
-function showOutboundMessage(message, type = "") {
-
-    if (!outboundMessage) return;
-
-    outboundMessage.textContent = message;
-
-    outboundMessage.className = "message";
-
-    if (type) {
-        outboundMessage.classList.add(type);
-    }
-
-}
-
-
-// =====================================================
-// VALIDATE OUTBOUND ROW
-// =====================================================
-
-function validateOutboundRow(row) {
-
-    if (!row.itemCode) {
-        return "Missing Item Code";
-    }
-
-    if (!row.warehouse) {
-        return "Missing Warehouse";
-    }
-
-    if (!row.bin) {
-        return "Missing Bin";
-    }
-
-    if (!Number.isFinite(row.quantity) || row.quantity <= 0) {
-        return "Invalid Quantity";
-    }
-
-    if (!row.referenceNo) {
-        return "Missing Reference No.";
-    }
-
-    if (!ALL_BINS.includes(row.bin)) {
-        return "Invalid Bin";
-    }
-
-    const itemExists =
-        masterItems.some(item =>
-            String(item.item_code || "").toUpperCase() === row.itemCode
-        );
-
-    if (!itemExists) {
-        return "Item Code not found in Masterlist";
-    }
-
-    return "";
-
-}
-
-
-// =====================================================
-// PROCESS OUTBOUND
-// =====================================================
-
-async function processOutbound() {
-
-    if (!isAdmin()) {
-
-        showOutboundMessage(
-            "Only admin users can process outbound transactions.",
-            "error"
-        );
-
-        return;
-    }
-
-    if (!pendingOutbound.length) {
-
-        showOutboundMessage(
-            "Please upload and preview an outbound Excel file first.",
-            "error"
-        );
-
-        return;
-    }
-
-    // ---------------------------------------------
-    // Validate all rows first
-    // ---------------------------------------------
-
-    const invalidRows =
-        pendingOutbound
-            .map((row, index) => ({
-                rowNumber: index + 2,
-                error: validateOutboundRow(row)
-            }))
-            .filter(row => row.error);
-
-    if (invalidRows.length > 0) {
-
-        const firstError =
-            invalidRows[0];
-
-        showOutboundMessage(
-            `Cannot process. Excel row ${firstError.rowNumber}: ${firstError.error}`,
-            "error"
-        );
-
-        return;
     }
 
     showOutboundMessage(
-        "Validating available inventory...",
+        "Outbound upload cancelled. No inventory was changed.",
         "info"
     );
-
-    await loadInventory();
-
-    // ---------------------------------------------
-    // Get current stock
-    // ---------------------------------------------
-
-    const stockMap = {};
-
-    currentInventoryData.forEach(row => {
-
-        const itemCode =
-            String(
-                row.master_items?.item_code || ""
-            ).toUpperCase();
-
-        const warehouse =
-            String(
-                row.warehouse_location || ""
-            ).toUpperCase();
-
-        const bin =
-            String(
-                row.bin_location || ""
-            ).toUpperCase();
-
-        const key =
-            `${itemCode}||${warehouse}||${bin}`;
-
-        if (!stockMap[key]) {
-            stockMap[key] = 0;
-        }
-
-        stockMap[key] +=
-            Number(row.quantity || 0);
-
-    });
-
-    // ---------------------------------------------
-    // Calculate required quantity
-    // ---------------------------------------------
-
-    const requiredMap = {};
-
-    pendingOutbound.forEach(row => {
-
-        const key =
-            `${row.itemCode}||${row.warehouse}||${row.bin}`;
-
-        if (!requiredMap[key]) {
-            requiredMap[key] = 0;
-        }
-
-        requiredMap[key] +=
-            row.quantity;
-
-    });
-
-    // ---------------------------------------------
-    // Check available stock
-    // ---------------------------------------------
-
-    for (const key in requiredMap) {
-
-        const available =
-            stockMap[key] || 0;
-
-        const required =
-            requiredMap[key];
-
-        if (required > available) {
-
-            showOutboundMessage(
-                `Insufficient stock. Required: ${required}, Available: ${available} (${key.replaceAll("||", " / ")})`,
-                "error"
-            );
-
-            return;
-        }
-
-    }
-
-    showOutboundMessage(
-        "Stock validated. Processing outbound...",
-        "info"
-    );
-
-    try {
-
-        // ---------------------------------------------
-        // Get logged-in user
-        // ---------------------------------------------
-
-        const {
-            data: {
-                user
-            }
-        } = await supabaseClient.auth.getUser();
-
-        if (!user) {
-            throw new Error(
-                "Your session has expired. Please login again."
-            );
-        }
-
-        // ---------------------------------------------
-        // Process each outbound row
-        // ---------------------------------------------
-
-        for (const row of pendingOutbound) {
-
-            let remaining =
-                row.quantity;
-
-            const matchingInventory =
-                currentInventoryData
-                    .filter(item => {
-
-                        const itemCode =
-                            String(
-                                item.master_items?.item_code || ""
-                            ).toUpperCase();
-
-                        const warehouse =
-                            String(
-                                item.warehouse_location || ""
-                            ).toUpperCase();
-
-                        const bin =
-                            String(
-                                item.bin_location || ""
-                            ).toUpperCase();
-
-                        return (
-                            itemCode === row.itemCode &&
-                            warehouse === row.warehouse &&
-                            bin === row.bin &&
-                            Number(item.quantity || 0) > 0
-                        );
-
-                    })
-                    .sort((a, b) => {
-
-                        const dateA =
-                            a.expiry_date || "9999-12-31";
-
-                        const dateB =
-                            b.expiry_date || "9999-12-31";
-
-                        return dateA.localeCompare(dateB);
-
-                    });
-
-            // -----------------------------------------
-            // FEFO deduction
-            // -----------------------------------------
-
-            for (const inventoryRow of matchingInventory) {
-
-                if (remaining <= 0) {
-                    break;
-                }
-
-                const available =
-                    Number(
-                        inventoryRow.quantity || 0
-                    );
-
-                if (available <= 0) {
-                    continue;
-                }
-
-                const deduct =
-                    Math.min(
-                        remaining,
-                        available
-                    );
-
-                const newQuantity =
-                    available - deduct;
-
-                // Update inventory
-                const {
-                    error: updateError
-                } = await supabaseClient
-                    .from("inventory")
-                    .update({
-                        quantity: newQuantity
-                    })
-                    .eq("id", inventoryRow.id);
-
-                if (updateError) {
-                    throw updateError;
-                }
-
-                // Save transaction
-                const {
-                    error: transactionError
-                } = await supabaseClient
-                    .from("inventory_transactions")
-                    .insert({
-                        item_id:
-                            inventoryRow.item_id,
-
-                        transaction_type:
-                            "OUTBOUND",
-
-                        warehouse_location:
-                            inventoryRow.warehouse_location,
-
-                        bin_location:
-                            inventoryRow.bin_location,
-
-                        expiry_date:
-                            inventoryRow.expiry_date,
-
-                        quantity_change:
-                            -deduct,
-
-                        reference_no:
-                            row.referenceNo,
-
-                        created_by:
-                            user.id
-                    });
-
-                if (transactionError) {
-                    throw transactionError;
-                }
-
-                remaining -= deduct;
-
-            }
-
-            if (remaining > 0) {
-
-                throw new Error(
-                    `Unable to deduct complete quantity for ${row.itemCode}.`
-                );
-
-            }
-
-        }
-
-        // ---------------------------------------------
-        // SUCCESS
-        // ---------------------------------------------
-
-        pendingOutbound = [];
-
-        outboundFile.value = "";
-
-        if (outboundTableBody) {
-            outboundTableBody.innerHTML = "";
-        }
-
-        showOutboundMessage(
-            "Outbound processed successfully.",
-            "success"
-        );
-
-        await loadInventory();
-
-        await loadInventorySummary();
-
-    } catch (error) {
-
-        console.error(
-            "Outbound processing error:",
-            error
-        );
-
-        showOutboundMessage(
-            `Outbound processing failed: ${error.message || "Unknown error"}`,
-            "error"
-        );
-
-    }
-
-}   
+}
