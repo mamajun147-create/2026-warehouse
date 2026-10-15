@@ -164,8 +164,19 @@
       <div class="form-group"><label for="inventorySearch">Search Item Code / Description</label><input type="text" id="inventorySearch" placeholder="Type item code or description..."></div>
     </div>
     <p id="inventoryFilterMessage" class="message"></p>
-    <div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Warehouse</th><th>Bin</th><th>Expiry</th><th>Quantity</th><th class="admin-only">Actions</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
+    <div class="table-wrapper"><table><thead><tr><th>Item Code</th><th>Description</th><th>Warehouse</th><th>Bin</th><th>Expiry</th><th>Quantity</th><th>Photo</th><th class="admin-only">Actions</th></tr></thead><tbody id="inventoryTableBody"></tbody></table></div>
   </div></section>
+
+  <div id="productPhotoModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="productPhotoTitle">
+    <div class="modal-card product-photo-card">
+      <div class="section-header">
+        <div><h2 id="productPhotoTitle">🖼️ Product Photo</h2><p id="productPhotoCode" class="section-description"></p></div>
+        <button id="closeProductPhotoBtn" class="secondary-btn" type="button">✕ Close</button>
+      </div>
+      <p id="productPhotoMessage" class="message" role="status"></p>
+      <div class="product-photo-stage"><img id="productPhotoImage" alt="Product photo" class="hidden"></div>
+    </div>
+  </div>
 
   <div id="editInventoryModal" class="modal hidden">
     <div class="modal-card">

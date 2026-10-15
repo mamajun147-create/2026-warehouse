@@ -130,6 +130,16 @@ const inventoryFilterMessage =
 const resetInventoryBtn =
     document.getElementById("resetInventoryBtn");
 
+// Product photos in Supabase Storage
+const PRODUCT_PHOTO_BUCKET = "NCCI Product Pictures";
+const PRODUCT_PHOTO_FOLDER = "SPAREPARTS";
+const productPhotoModal = document.getElementById("productPhotoModal");
+const productPhotoTitle = document.getElementById("productPhotoTitle");
+const productPhotoCode = document.getElementById("productPhotoCode");
+const productPhotoMessage = document.getElementById("productPhotoMessage");
+const productPhotoImage = document.getElementById("productPhotoImage");
+const closeProductPhotoBtn = document.getElementById("closeProductPhotoBtn");
+
 
 // Summary
 const summaryTableBody =
@@ -247,6 +257,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     setupThemeToggle();
     setupMenu();
+    setupProductPhotoViewer();
 
     setupLogin();
 
@@ -2172,6 +2183,91 @@ function updateDashboardCards(data) {
 
 
 // =====================================================
+// PRODUCT PHOTO VIEWER (Supabase Storage)
+// =====================================================
+
+function setupProductPhotoViewer() {
+    if (inventoryTableBody) {
+        inventoryTableBody.addEventListener("click", event => {
+            const button = event.target.closest("[data-product-photo-code]");
+            if (!button) return;
+            const code = button.getAttribute("data-product-photo-code") || "";
+            openProductPhoto(code);
+        });
+    }
+    closeProductPhotoBtn?.addEventListener("click", closeProductPhoto);
+    productPhotoModal?.addEventListener("click", event => {
+        if (event.target === productPhotoModal) closeProductPhoto();
+    });
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && productPhotoModal && !productPhotoModal.classList.contains("hidden")) closeProductPhoto();
+    });
+}
+
+async function openProductPhoto(itemCodeValue) {
+    const code = String(itemCodeValue || "").trim();
+    if (!code || !productPhotoModal || !productPhotoImage || !productPhotoMessage) return;
+
+    productPhotoTitle.textContent = "🖼️ Product Photo";
+    productPhotoCode.textContent = `Item Code: ${code}`;
+    productPhotoMessage.textContent = "Loading product photo…";
+    productPhotoMessage.className = "message";
+    productPhotoImage.classList.add("hidden");
+    productPhotoImage.removeAttribute("src");
+    productPhotoModal.classList.remove("hidden");
+
+    // Try the displayed item code first, then common O/0 confusion in codes.
+    // Example: displayed PARO472 can still find the storage file PAR0472.jpg.
+    // This affects photo lookup only; it does not modify inventory records.
+    const codeCandidates = [...new Set([code, code.replace(/[oO]/g, "0")])];
+    const extensions = ["jpg", "jpeg", "png", "webp"];
+    let lastError = null;
+    for (const candidateCode of codeCandidates) {
+      for (const ext of extensions) {
+        const path = `${PRODUCT_PHOTO_FOLDER}/${candidateCode}.${ext}`;
+        try {
+            // Bucket is configured as PUBLIC, so use its public URL.
+            const { data } = supabaseClient.storage
+                .from(PRODUCT_PHOTO_BUCKET)
+                .getPublicUrl(path);
+            const publicUrl = data?.publicUrl;
+            if (!publicUrl) continue;
+
+            const loaded = await new Promise(resolve => {
+                const img = new Image();
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = publicUrl;
+            });
+            if (!loaded) continue;
+
+            productPhotoImage.src = publicUrl;
+            productPhotoImage.alt = `Product photo for ${candidateCode}`;
+            productPhotoImage.classList.remove("hidden");
+            productPhotoMessage.textContent = "";
+            return;
+        } catch (error) {
+            lastError = error;
+        }
+      }
+    }
+
+    productPhotoMessage.textContent = lastError
+        ? `Hindi ma-load ang picture para sa ${code}. I-check ang Storage access policy at kung ang file ay nasa ${PRODUCT_PHOTO_FOLDER}/${code}.jpg (o .jpeg/.png/.webp).`
+        : `Walang nahanap na picture para sa ${code}. Tiyaking ang filename ay ${code}.jpg (o .jpeg/.png/.webp) sa folder na ${PRODUCT_PHOTO_FOLDER}.`;
+    productPhotoMessage.classList.add("error");
+}
+
+function closeProductPhoto() {
+    productPhotoModal?.classList.add("hidden");
+    if (productPhotoImage) {
+        productPhotoImage.removeAttribute("src");
+        productPhotoImage.classList.add("hidden");
+    }
+}
+
+
+// =====================================================
 // CURRENT INVENTORY TABLE RENDERER
 // =====================================================
 
@@ -2220,6 +2316,7 @@ function renderInventoryTable(data) {
             <td>${escapeHtml(row.bin_location || "")}</td>
             <td>${renderExpiryBadge(row.expiry_date)}</td>
             <td>${Number(row.quantity || 0).toLocaleString()}</td>
+            <td><button type="button" class="secondary-btn photo-view-btn" data-product-photo-code="${escapeHtml(item.item_code || "")}" ${item.item_code ? "" : "disabled"}>🖼️ View Photo</button></td>
             <td class="admin-only">
                 ${isAdmin() ? `<div class="action-buttons">
                     <button type="button" class="edit-btn" onclick="openEditInventory('${row.id}')">✏️ Edit</button>
