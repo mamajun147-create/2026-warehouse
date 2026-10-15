@@ -30,6 +30,7 @@
     <button class="menu-btn" data-section="masterlistSection">📋 Masterlist</button>
     <button class="menu-btn" data-section="currentStockSection">📊 Current Inventory</button>
     <button class="menu-btn" data-section="outboundSection">📤 Outbound Upload</button>
+    <button class="menu-btn" data-section="inboundSection">📥 Inbound Upload</button>
     <button class="menu-btn" data-section="summarySection">📈 Inventory Summary</button>
     
   </div>
@@ -300,6 +301,61 @@
   </div></section>
 </section>
 </main>
+
+<section id="inboundSection" class="system-section hidden">
+    <div class="card">
+        <div class="section-header">
+            <div>
+                <h2>📥 Inbound Upload</h2>
+                <p>Upload stock-in transactions to add to Current Inventory.</p>
+            </div>
+        </div>
+
+        <div class="upload-box">
+            <label for="inboundFile">Select Inbound Excel File</label>
+            <input
+                type="file"
+                id="inboundFile"
+                accept=".xlsx,.xls,.xlsm"
+            >
+
+            <button
+                id="previewInboundBtn"
+                class="primary-btn"
+                type="button"
+            >
+                📋 PREVIEW INBOUND
+            </button>
+        </div>
+
+        <p id="inboundMessage" class="message"></p>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item Code</th>
+                        <th>Warehouse</th>
+                        <th>Bin</th>
+                        <th>Expiry Date</th>
+                        <th>Quantity</th>
+                    </tr>
+                </thead>
+                <tbody id="inboundTableBody"></tbody>
+            </table>
+        </div>
+
+        <div class="button-row">
+            <button
+                id="processInboundBtn"
+                class="primary-btn"
+                type="button"
+            >
+                📥 PROCESS INBOUND
+            </button>
+        </div>
+    </div>
+</section>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>

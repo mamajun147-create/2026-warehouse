@@ -163,6 +163,15 @@ const processOutboundBtn =
 
 const outboundMessage =
     document.getElementById("outboundMessage");
+
+// Inbound Upload
+const inboundFile = document.getElementById("inboundFile");
+const previewInboundBtn = document.getElementById("previewInboundBtn");
+const inboundTableBody = document.getElementById("inboundTableBody");
+const processInboundBtn = document.getElementById("processInboundBtn");
+const inboundMessage = document.getElementById("inboundMessage");
+let pendingInbound = [];
+let inboundUploadInitialized = false;
   
 
     let pendingOutbound = [];
@@ -364,6 +373,10 @@ function setupMenu() {
             if (targetSection === "outboundSection") {
                  setupOutboundUpload();
             } 
+
+            if (targetSection === "inboundSection") {
+                setupInboundUpload();
+            }
 
             if (targetSection === "summarySection") {
                 await loadInventorySummary();
@@ -3350,6 +3363,191 @@ function setupOutboundTableHeader() {
             <th>Action</th>
         </tr>
     `;
+}
+
+
+// =====================================================
+// INBOUND UPLOAD
+// Required Excel columns: Item Code, Warehouse, Bin, Expiry Date, Quantity
+// =====================================================
+function showInboundMessage(message, type = "") {
+    if (!inboundMessage) return;
+    inboundMessage.textContent = message || "";
+    inboundMessage.className = "message";
+    if (type) inboundMessage.classList.add(type);
+}
+
+function validateInboundRow(row) {
+    if (!row.itemCode) return "Item Code is required.";
+    if (!masterItems.some(item => String(item.item_code || "").trim().toUpperCase() === row.itemCode)) {
+        return `Item Code ${row.itemCode} was not found in Masterlist.`;
+    }
+    if (!row.warehouse) return "Warehouse is required.";
+    if (!row.bin) return "Bin is required.";
+    if (!ALL_BINS.includes(row.bin)) return `Invalid Bin ${row.bin}. Please use a valid bin location.`;
+    if (!row.expiryDate || !/^\d{4}-\d{2}-\d{2}$/.test(row.expiryDate) || Number.isNaN(new Date(row.expiryDate + "T00:00:00").getTime())) return "A valid Expiry Date is required.";
+    if (row.quantity === "" || !Number.isFinite(Number(row.quantity)) || Number(row.quantity) <= 0) return "Quantity must be a number greater than 0.";
+    return "";
+}
+
+function renderInboundPreview() {
+    if (!inboundTableBody) return;
+    inboundTableBody.innerHTML = "";
+    if (!pendingInbound.length) {
+        inboundTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">No inbound data loaded.</td></tr>';
+        return;
+    }
+    pendingInbound.forEach((row, index) => {
+        const validation = validateInboundRow(row);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${escapeHtml(row.itemCode)}</td><td>${escapeHtml(row.warehouse)}</td><td>${escapeHtml(row.bin)}</td><td>${escapeHtml(row.expiryDate)}</td><td>${Number(row.quantity || 0).toLocaleString()}</td>`;
+        if (validation) tr.title = `Excel row ${index + 2}: ${validation}`;
+        inboundTableBody.appendChild(tr);
+    });
+}
+
+function setupInboundUpload() {
+    if (inboundUploadInitialized) return;
+    if (!inboundFile || !previewInboundBtn || !inboundTableBody || !processInboundBtn) {
+        console.warn("Inbound Upload elements not found. Check inbound HTML IDs.");
+        return;
+    }
+    inboundUploadInitialized = true;
+    renderInboundPreview();
+
+    previewInboundBtn.addEventListener("click", async () => {
+        if (!isAdmin()) {
+            showInboundMessage("Only admin users can process inbound transactions.", "error");
+            return;
+        }
+        const file = inboundFile.files && inboundFile.files[0];
+        if (!file) {
+            showInboundMessage("Please select an Excel file first.", "error");
+            return;
+        }
+        try {
+            showInboundMessage("Reading inbound file...", "info");
+            const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+            if (!workbook.SheetNames || !workbook.SheetNames.length) throw new Error("No worksheet found.");
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: true });
+            if (!rows.length) {
+                pendingInbound = [];
+                renderInboundPreview();
+                showInboundMessage("The Excel file is empty.", "error");
+                return;
+            }
+            pendingInbound = rows.map(row => {
+                const code = String(getOutboundColumn(row, ["Item Code", "ItemCode", "item_code", "ITEM CODE", "Code"]) || "").trim().toUpperCase();
+                const wh = String(getOutboundColumn(row, ["Warehouse", "Warehouse Location", "warehouse_location", "LOCATION"]) || "").trim().toUpperCase();
+                const bin = String(getOutboundColumn(row, ["Bin", "Bin Location", "bin_location", "BIN"]) || "").trim().toUpperCase();
+                const expiry = normalizeOutboundDate(getOutboundColumn(row, ["Expiry Date", "Expiry", "expiry_date", "EXPIRY DATE"]));
+                const q = getOutboundColumn(row, ["Quantity", "Qty", "QTY", "quantity"]);
+                return { itemCode: code, warehouse: wh, bin, expiryDate: expiry, quantity: q === "" ? "" : Number(q) };
+            });
+            renderInboundPreview();
+            const invalid = pendingInbound.map((row, i) => ({ rowNumber: i + 2, error: validateInboundRow(row) })).filter(x => x.error);
+            if (invalid.length) showInboundMessage(`Preview loaded: ${pendingInbound.length} row(s). First issue at Excel row ${invalid[0].rowNumber}: ${invalid[0].error}`, "error");
+            else showInboundMessage(`Preview successful: ${pendingInbound.length} row(s). No stock has been changed.`, "success");
+        } catch (error) {
+            console.error("Inbound preview error:", error);
+            pendingInbound = [];
+            renderInboundPreview();
+            showInboundMessage("Unable to read inbound file: " + (error.message || "Unknown error"), "error");
+        }
+    });
+    processInboundBtn.addEventListener("click", processInbound);
+}
+
+async function processInbound() {
+    if (!isAdmin()) {
+        showInboundMessage("Only admin users can process inbound transactions.", "error");
+        return;
+    }
+    if (!pendingInbound.length) {
+        showInboundMessage("Please upload and preview an inbound Excel file first.", "error");
+        return;
+    }
+    const invalid = pendingInbound.map((row, i) => ({ rowNumber: i + 2, error: validateInboundRow(row) })).filter(x => x.error);
+    if (invalid.length) {
+        showInboundMessage(`Cannot process. Excel row ${invalid[0].rowNumber}: ${invalid[0].error}`, "error");
+        return;
+    }
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+        showInboundMessage("Your session has expired. Please login again.", "error");
+        return;
+    }
+    processInboundBtn.disabled = true;
+    const oldLabel = processInboundBtn.textContent;
+    processInboundBtn.textContent = "PROCESSING...";
+    try {
+        showInboundMessage("Processing inbound and updating inventory...", "info");
+        const { data: inventoryRows, error: inventoryError } = await supabaseClient
+            .from("inventory")
+            .select("id,item_id,warehouse_location,bin_location,expiry_date,quantity");
+        if (inventoryError) throw inventoryError;
+        const existingRows = inventoryRows || [];
+        const planned = new Map();
+        const masterByCode = new Map(masterItems.map(item => [String(item.item_code || "").trim().toUpperCase(), item]));
+        const keyFor = (itemId, wh, bin, expiry) => `${itemId}||${wh}||${bin}||${expiry}`;
+        existingRows.forEach(row => {
+            const key = keyFor(row.item_id, String(row.warehouse_location || "").trim().toUpperCase(), String(row.bin_location || "").trim().toUpperCase(), normalizeOutboundDate(row.expiry_date));
+            if (!planned.has(key)) planned.set(key, { existingId: row.id, item_id: row.item_id, warehouse_location: row.warehouse_location, bin_location: row.bin_location, expiry_date: normalizeOutboundDate(row.expiry_date), quantity: Number(row.quantity || 0), isNew: false });
+            else planned.get(key).quantity += Number(row.quantity || 0);
+        });
+        const inboundTotals = new Map();
+        pendingInbound.forEach(row => {
+            const item = masterByCode.get(row.itemCode);
+            const key = keyFor(item.id, row.warehouse, row.bin, row.expiryDate);
+            if (!inboundTotals.has(key)) inboundTotals.set(key, { item, row, quantity: 0 });
+            inboundTotals.get(key).quantity += Number(row.quantity);
+            if (!planned.has(key)) planned.set(key, { item_id: item.id, warehouse_location: row.warehouse, bin_location: row.bin, expiry_date: row.expiryDate, quantity: 0, isNew: true });
+            planned.get(key).quantity += Number(row.quantity);
+        });
+        // Save stock records first; log every inbound row afterward.
+        for (const [key, incoming] of inboundTotals) {
+            const target = planned.get(key);
+            if (target.isNew) {
+                const { data, error } = await supabaseClient.from("inventory").insert({ item_id: target.item_id, warehouse_location: target.warehouse_location, bin_location: target.bin_location, expiry_date: target.expiry_date, quantity: incoming.quantity, created_by: user.id }).select("id").single();
+                if (error) throw error;
+                target.existingId = data.id;
+                target.isNew = false;
+            } else {
+                // Existing record(s) with the exact key are consolidated into one record to avoid lost quantity.
+                const matches = existingRows.filter(r => String(r.item_id) === String(target.item_id) && String(r.warehouse_location || "").trim().toUpperCase() === String(target.warehouse_location || "").trim().toUpperCase() && String(r.bin_location || "").trim().toUpperCase() === String(target.bin_location || "").trim().toUpperCase() && normalizeOutboundDate(r.expiry_date) === target.expiry_date);
+                const primary = matches[0];
+                const otherIds = matches.slice(1).map(r => r.id);
+                if (primary) {
+                    const newQty = matches.reduce((sum, r) => sum + Number(r.quantity || 0), 0) + incoming.quantity;
+                    const { error } = await supabaseClient.from("inventory").update({ quantity: newQty }).eq("id", primary.id);
+                    if (error) throw error;
+                    for (const id of otherIds) {
+                        const { error: deleteError } = await supabaseClient.from("inventory").delete().eq("id", id);
+                        if (deleteError) throw deleteError;
+                    }
+                } else {
+                    const { error } = await supabaseClient.from("inventory").insert({ item_id: target.item_id, warehouse_location: target.warehouse_location, bin_location: target.bin_location, expiry_date: target.expiry_date, quantity: incoming.quantity, created_by: user.id });
+                    if (error) throw error;
+                }
+            }
+        }
+        const transactionRows = pendingInbound.map(row => ({ item_id: masterByCode.get(row.itemCode).id, transaction_type: "INBOUND", warehouse_location: row.warehouse, bin_location: row.bin, expiry_date: row.expiryDate, quantity_change: Number(row.quantity), reference_no: "INBOUND-UPLOAD", created_by: user.id }));
+        const { error: txError } = await supabaseClient.from("inventory_transactions").insert(transactionRows);
+        if (txError) throw txError;
+        const count = pendingInbound.length;
+        pendingInbound = [];
+        inboundFile.value = "";
+        renderInboundPreview();
+        await loadInventory();
+        await loadInventorySummary();
+        showInboundMessage(`Inbound processed successfully. ${count} row(s) added to inventory.`, "success");
+    } catch (error) {
+        console.error("Process inbound error:", error);
+        showInboundMessage("Inbound processing failed: " + (error.message || "Unknown error") + ". Please check Current Inventory before retrying, as some rows may already have been saved.", "error");
+    } finally {
+        processInboundBtn.disabled = false;
+        processInboundBtn.textContent = oldLabel;
+    }
 }
 
 
