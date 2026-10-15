@@ -814,3 +814,384 @@ html[data-theme="dark"] select:focus-visible,
 html[data-theme="dark"] textarea:focus-visible {
     outline-color: #38bdf8;
 }
+
+
+/* =========================================================
+   NCCI PREMIUM SIDEBAR LAYOUT — VISUAL ONLY
+   Keeps existing section IDs and JavaScript behavior intact.
+   ========================================================= */
+:root {
+  --sidebar-width: 270px;
+}
+.topbar {
+  min-height: 76px;
+  padding: 16px clamp(18px, 3vw, 38px);
+  background: linear-gradient(115deg, #081426, #142844);
+}
+.topbar h1 { font-size: clamp(17px, 1.7vw, 22px); letter-spacing: -.5px; }
+.topbar p { margin-top: 4px; letter-spacing: 1.5px; }
+.container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+#appSection {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: 0;
+  min-height: calc(100vh - 76px);
+  padding: 0;
+}
+#appSection > .app-sidebar {
+  grid-column: 1;
+  grid-row: 1 / span 30;
+  align-self: stretch;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: calc(100vh - 76px);
+  padding: 26px 14px 20px;
+  background: linear-gradient(180deg, #fff 0%, #f7faff 100%);
+  border-right: 1px solid #e1e9f5;
+  box-shadow: 8px 0 28px rgba(18, 43, 80, .035);
+  z-index: 5;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 10px 28px;
+  color: #1749ad;
+}
+.sidebar-logo {
+  width: 46px; height: 46px; flex: 0 0 46px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  color: white;
+  background: linear-gradient(140deg, #174bc4, #4c82ff);
+  box-shadow: 0 8px 18px rgba(50,105,232,.22);
+  font-family: 'Manrope', sans-serif;
+  font-size: 28px; font-weight: 900; font-style: italic;
+}
+.sidebar-brand strong {
+  display: block; font-family: 'Manrope', sans-serif;
+  font-size: 23px; line-height: 1.1; letter-spacing: -.8px;
+}
+.sidebar-brand span {
+  display: block; margin-top: 4px; color: #718096;
+  font-size: 10px; font-weight: 700; letter-spacing: .15px;
+}
+.sidebar-nav-label {
+  padding: 0 12px 10px; color: #9aa8bb;
+  font-size: 10px; font-weight: 900; letter-spacing: 1.6px;
+}
+#appSection .menu-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  min-width: 0;
+}
+#appSection .menu-btn {
+  width: 100%; min-height: 49px;
+  justify-content: flex-start; text-align: left;
+  padding: 13px 13px; gap: 11px;
+  border-radius: 12px; border: 1px solid transparent;
+  background: transparent; box-shadow: none;
+  color: #50627e; font-size: 12px; font-weight: 700;
+}
+#appSection .menu-btn:hover {
+  transform: none; color: #2459d3;
+  border-color: #e0eaff; background: #f1f5ff;
+}
+#appSection .menu-btn.active {
+  color: #fff; border-color: transparent;
+  background: linear-gradient(120deg, #2459d3, #477cff);
+  box-shadow: 0 8px 18px rgba(50,105,232,.2);
+}
+#appSection .menu-btn.active::after { display: none; }
+.sidebar-footer {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: auto; padding: 22px 12px 4px;
+  color: #8a98aa; font-size: 10px; font-weight: 700;
+}
+.sidebar-footer-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #16b8a6; box-shadow: 0 0 0 4px rgba(22,184,166,.12);
+}
+#appSection > #dashboardOverview,
+#appSection > .system-section,
+#appSection > #editInventoryModal {
+  grid-column: 2;
+  min-width: 0;
+  margin-left: 0;
+  margin-right: 0;
+}
+#appSection > #dashboardOverview {
+  grid-row: 1;
+  padding: 28px 30px 0;
+  margin: 0;
+}
+#appSection > .system-section {
+  grid-row: auto;
+  padding: 0 30px 30px;
+}
+#appSection > #dashboardOverview + #inventorySection { margin-top: 0; }
+#appSection > .system-section > .card,
+#appSection > #summarySection > .card,
+#appSection > #currentStockSection > .card {
+  width: 100%;
+}
+#appSection > #editInventoryModal { position: fixed; }
+#appSection .dashboard-heading { margin-bottom: 18px; }
+#appSection .dashboard-cards { gap: 15px; }
+#appSection .dashboard-stat { border-radius: 17px; }
+#appSection .section-header { align-items: center; }
+#appSection .table-wrapper { max-width: 100%; }
+#appSection .inventory-filter-grid { margin-top: 8px; }
+#appSection #summarySection { padding-top: 0; }
+body.dark-theme #appSection > .app-sidebar {
+  background: linear-gradient(180deg, #111e31 0%, #0e1929 100%);
+  border-right-color: #2b3a50;
+}
+body.dark-theme .sidebar-brand { color: #8db0ff; }
+body.dark-theme .sidebar-brand span,
+body.dark-theme .sidebar-footer { color: #a5b3c9; }
+body.dark-theme .sidebar-nav-label { color: #718096; }
+body.dark-theme #appSection .menu-btn { color: #c4d0e3; }
+body.dark-theme #appSection .menu-btn:hover { background: #1b2b42; border-color: #2b3a50; color: #a9c3ff; }
+body.dark-theme #appSection .menu-btn.active { color: #fff; }
+@media (max-width: 1050px) {
+  :root { --sidebar-width: 225px; }
+  #appSection > #dashboardOverview { padding: 24px 20px 0; }
+  #appSection > .system-section { padding: 0 20px 24px; }
+  #appSection .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .topbar { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .user-area { justify-content: flex-start; width: 100%; }
+  #appSection { display: flex; flex-direction: column; }
+  #appSection > .app-sidebar {
+    position: relative; top: auto; width: 100%; min-height: auto;
+    padding: 15px 12px 12px; border-right: 0; border-bottom: 1px solid #e1e9f5;
+  }
+  .sidebar-brand { padding: 0 7px 14px; }
+  .sidebar-logo { width: 38px; height: 38px; flex-basis: 38px; font-size: 23px; }
+  .sidebar-brand strong { font-size: 19px; }
+  .sidebar-nav-label, .sidebar-footer { display: none; }
+  #appSection .menu-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  #appSection .menu-btn { min-height: 42px; padding: 10px; font-size: 11px; }
+  #appSection > #dashboardOverview { padding: 20px 12px 0; }
+  #appSection > .system-section { padding: 0 12px 20px; }
+  #appSection .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #appSection .dashboard-stat { min-height: 110px; padding: 14px; }
+  #appSection .section-header { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 420px) {
+  #appSection .dashboard-cards { grid-template-columns: minmax(0, 1fr); }
+}
+
+
+/* =========================================================
+   WIDE WORKSPACE + COMPACT SIDEBAR + FULL TABLE VISIBILITY
+   ========================================================= */
+:root { --sidebar-width: 238px; }
+#appSection > #dashboardOverview { padding: 24px 22px 0; }
+#appSection > .system-section { padding: 0 22px 24px; }
+#appSection > .app-sidebar { padding-left: 12px; padding-right: 12px; }
+#appSection .menu-btn { min-height: 46px; padding: 11px 10px; font-size: 11.5px; }
+#appSection .sidebar-brand { gap: 9px; padding-left: 7px; padding-right: 5px; }
+#appSection .sidebar-brand strong { font-size: 21px; }
+#appSection .table-wrapper {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+#appSection .table-wrapper table {
+  width: 100%;
+  min-width: 760px;
+  white-space: normal;
+  table-layout: auto;
+}
+#appSection .table-wrapper th,
+#appSection .table-wrapper td {
+  padding: 10px 11px;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+#appSection .table-wrapper th { white-space: normal; }
+#appSection .table-wrapper td button { white-space: nowrap; }
+#currentStockSection .table-wrapper table { min-width: 850px; }
+#summarySection .table-wrapper table { min-width: 900px; }
+#currentStockSection .inventory-filter-grid { grid-template-columns: minmax(220px, .8fr) minmax(280px, 1.2fr); }
+#appSection .section-header { gap: 14px; }
+#appSection .section-header .button-row { flex-wrap: wrap; }
+@media (min-width: 1500px) {
+  :root { --sidebar-width: 238px; }
+  #appSection > #dashboardOverview { padding-left: 24px; padding-right: 24px; }
+  #appSection > .system-section { padding-left: 24px; padding-right: 24px; }
+  #appSection .table-wrapper th,
+  #appSection .table-wrapper td { padding: 11px 12px; }
+}
+@media (max-width: 1050px) and (min-width: 721px) {
+  :root { --sidebar-width: 205px; }
+  #appSection > #dashboardOverview { padding-left: 16px; padding-right: 16px; }
+  #appSection > .system-section { padding-left: 16px; padding-right: 16px; }
+  #appSection .menu-btn { font-size: 10.5px; gap: 7px; }
+  #currentStockSection .inventory-filter-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  :root { --sidebar-width: 100%; }
+  #appSection .table-wrapper { max-height: 65vh; }
+  #appSection .table-wrapper table { min-width: 760px; }
+  #currentStockSection .table-wrapper table { min-width: 820px; }
+  #summarySection .table-wrapper table { min-width: 880px; }
+}
+
+
+/* =========================================================
+   FINAL SIDEBAR ALIGNMENT — MAXIMIZE CENTRAL WORKSPACE
+   ========================================================= */
+@media (min-width: 721px) {
+  :root { --sidebar-width: 220px; }
+  #appSection {
+    width: 100%;
+    max-width: 100%;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    column-gap: 0;
+  }
+  #appSection > .app-sidebar {
+    width: var(--sidebar-width);
+    min-width: 0;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  #appSection > #dashboardOverview,
+  #appSection > .system-section {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  #appSection > #dashboardOverview { padding-left: 20px; padding-right: 20px; }
+  #appSection > .system-section { padding-left: 20px; padding-right: 20px; }
+  #appSection .dashboard-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #appSection .table-wrapper { width: 100%; max-width: 100%; min-width: 0; }
+  #appSection .table-wrapper table { max-width: 100%; }
+}
+@media (max-width: 1200px) and (min-width: 721px) {
+  :root { --sidebar-width: 205px; }
+  #appSection .dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #appSection > #dashboardOverview { padding-left: 14px; padding-right: 14px; }
+  #appSection > .system-section { padding-left: 14px; padding-right: 14px; }
+}
+
+
+/* =========================================================
+   FACEBOOK-STYLE COLLAPSIBLE SIDEBAR — FULL WIDTH WORKSPACE
+   ========================================================= */
+@media (min-width: 721px) {
+  #appSection {
+    display: block !important;
+    position: relative;
+    width: 100%;
+    min-height: calc(100vh - 76px);
+  }
+  #appSection > .app-sidebar {
+    position: fixed !important;
+    z-index: 1001;
+    inset: 0 auto 0 0;
+    width: min(290px, 86vw) !important;
+    min-height: 100vh !important;
+    height: 100vh;
+    overflow-y: auto;
+    transform: translateX(-105%);
+    transition: transform .24s ease;
+    box-shadow: 14px 0 42px rgba(8,20,38,.18);
+  }
+  #appSection.sidebar-open > .app-sidebar { transform: translateX(0); }
+  #appSection > #dashboardOverview,
+  #appSection > .system-section {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding-left: clamp(22px, 2.4vw, 42px) !important;
+    padding-right: clamp(22px, 2.4vw, 42px) !important;
+    box-sizing: border-box;
+  }
+  #appSection > #dashboardOverview { padding-top: 28px !important; }
+  #appSection > .system-section { padding-bottom: 30px !important; }
+  #appSection > #editInventoryModal { position: fixed; }
+}
+.sidebar-toggle {
+  position: fixed;
+  z-index: 1003;
+  top: 88px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #dbe5f4;
+  border-radius: 13px;
+  color: #244fae;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 8px 24px rgba(20,45,85,.14);
+  font-size: 22px;
+  line-height: 1;
+}
+.sidebar-toggle:hover { background: #edf3ff; }
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: rgba(7,18,35,.38);
+  backdrop-filter: blur(2px);
+}
+#appSection.sidebar-open > .sidebar-backdrop { display: block; }
+#appSection.sidebar-open > .app-sidebar { transform: translateX(0); }
+body.dark-theme .sidebar-toggle { color: #d8e5ff; background: #14243a; border-color: #2b3a50; }
+@media (max-width: 720px) {
+  #appSection { display: block !important; }
+  #appSection > .app-sidebar {
+    position: fixed !important;
+    z-index: 1001;
+    inset: 0 auto 0 0;
+    width: min(290px, 86vw) !important;
+    height: 100vh;
+    min-height: 100vh !important;
+    overflow-y: auto;
+    transform: translateX(-105%);
+    transition: transform .24s ease;
+    border-right: 1px solid #e1e9f5;
+    border-bottom: 0;
+    padding: 22px 14px 20px !important;
+    box-shadow: 14px 0 42px rgba(8,20,38,.18);
+  }
+  #appSection.sidebar-open > .app-sidebar { transform: translateX(0); }
+  #appSection .sidebar-nav-label, #appSection .sidebar-footer { display: flex; }
+  #appSection .menu-grid { display: flex; flex-direction: column; gap: 7px; }
+  #appSection .menu-btn { min-height: 46px; font-size: 12px; }
+  #appSection > #dashboardOverview { padding: 22px 12px 0 !important; }
+  #appSection > .system-section { padding: 0 12px 20px !important; }
+  .sidebar-toggle { top: 14px; left: auto; right: 14px; width: 42px; height: 42px; }
+}

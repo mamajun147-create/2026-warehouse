@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NCCI WAREHOUSE INVENTORY</title>
+<title>NCCI Warehouse Inventory</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,7 +24,12 @@
 </section>
 
 <section id="appSection" class="hidden">
-  <div class="menu-grid">
+  <button id="sidebarToggleBtn" class="sidebar-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false" title="Menu">☰</button>
+  <button id="sidebarBackdrop" class="sidebar-backdrop" type="button" aria-label="Close navigation menu" tabindex="-1"></button>
+  <aside class="app-sidebar" id="appSidebar" aria-label="Main navigation">
+    <div class="sidebar-brand"><div class="sidebar-logo">N</div><div><strong>NCCI</strong><span>Warehouse Inventory</span></div></div>
+    <div class="sidebar-nav-label">WORKSPACE</div>
+    <div class="menu-grid">
     <button class="menu-btn active" data-section="inventorySection">📦 Beginning Inventory</button>
     <button class="menu-btn" data-section="transferSection">🔄 Stock Transfer</button>
     <button class="menu-btn" data-section="masterlistSection">📋 Masterlist</button>
@@ -33,7 +38,9 @@
     <button class="menu-btn" data-section="inboundSection">📥 Inbound Upload</button>
     <button class="menu-btn" data-section="summarySection">📈 Inventory Summary</button>
     
-  </div>
+    </div>
+    <div class="sidebar-footer"><span class="sidebar-footer-dot"></span> Inventory Management</div>
+  </aside>
 
   <!-- LIVE DASHBOARD SUMMARY: values are populated from Current Inventory -->
   <section id="dashboardOverview" class="dashboard-overview" aria-label="Inventory overview">
@@ -299,9 +306,6 @@
 
     <div class="table-wrapper"><table><thead><tr><th>Warehouse</th><th>Item Code</th><th>Description</th><th>Category</th><th>Expiry Date</th><th>Total Quantity</th></tr></thead><tbody id="summaryTableBody"></tbody></table></div>
   </div></section>
-</section>
-</main>
-
 <section id="inboundSection" class="system-section hidden">
     <div class="card">
         <div class="section-header">
@@ -356,6 +360,9 @@
         </div>
     </div>
 </section>
+
+</section>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>

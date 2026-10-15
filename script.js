@@ -319,6 +319,33 @@ function applyRolePermissions() {
 
 function setupMenu() {
 
+    // Collapsible, overlay-style sidebar (Facebook-like).
+    const appRoot = document.getElementById("appSection");
+    const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
+    const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+    const closeSidebar = () => {
+        if (!appRoot) return;
+        appRoot.classList.remove("sidebar-open");
+        if (sidebarToggleBtn) {
+            sidebarToggleBtn.setAttribute("aria-expanded", "false");
+            sidebarToggleBtn.setAttribute("aria-label", "Open navigation menu");
+            sidebarToggleBtn.textContent = "☰";
+        }
+    };
+    if (sidebarToggleBtn && appRoot) {
+        sidebarToggleBtn.addEventListener("click", () => {
+            const willOpen = !appRoot.classList.contains("sidebar-open");
+            appRoot.classList.toggle("sidebar-open", willOpen);
+            sidebarToggleBtn.setAttribute("aria-expanded", String(willOpen));
+            sidebarToggleBtn.setAttribute("aria-label", willOpen ? "Close navigation menu" : "Open navigation menu");
+            sidebarToggleBtn.textContent = willOpen ? "✕" : "☰";
+        });
+    }
+    if (sidebarBackdrop) sidebarBackdrop.addEventListener("click", closeSidebar);
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeSidebar();
+    });
+
     const menuButtons =
         document.querySelectorAll(".menu-btn");
 
@@ -332,6 +359,12 @@ function setupMenu() {
 
             const targetSection =
                 button.dataset.section;
+            if (appRoot) appRoot.classList.remove("sidebar-open");
+            if (sidebarToggleBtn) {
+                sidebarToggleBtn.setAttribute("aria-expanded", "false");
+                sidebarToggleBtn.setAttribute("aria-label", "Open navigation menu");
+                sidebarToggleBtn.textContent = "☰";
+            }
 
 
             // Remove active
