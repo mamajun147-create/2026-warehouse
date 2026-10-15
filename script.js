@@ -1938,7 +1938,8 @@ async function loadInventory() {
                 "Unable to load inventory: " + error.message;
         }
 
-        return;
+        currentInventoryData = [];
+        return false;
     }
 
 
@@ -1947,6 +1948,7 @@ async function loadInventory() {
     updateDashboardCards(currentInventoryData);
     populateInventoryLocationFilter(currentInventoryData);
     applyInventoryFilters();
+    return true;
 
 }
 
@@ -3353,81 +3355,27 @@ function showOutboundMessage(
 
 function validateOutboundRow(row) {
 
-    if (!row) {
-        return "Invalid row.";
-    }
-
-    if (!row.itemCode) {
-        return "Missing Item Code.";
-    }
-
-    if (!row.warehouse) {
-        return "Missing Warehouse.";
-    }
-
-    if (!row.bin) {
-        return "Missing Bin.";
-    }
-
-    if (!row.expiryDate) {
-        return "Missing Expiry Date.";
-    }
+    if (!row) return "Invalid row.";
+    if (!row.itemCode) return "Missing Item Code.";
+    if (!row.warehouse) return "Missing Warehouse.";
+    if (!row.expiryDate || !/^\d{4}-\d{2}-\d{2}$/.test(row.expiryDate)) return "Missing or invalid Expiry Date.";
 
     if (
         row.quantity === "" ||
         row.quantity === null ||
         row.quantity === undefined ||
-        !Number.isFinite(
-            Number(row.quantity)
-        ) ||
+        !Number.isFinite(Number(row.quantity)) ||
         Number(row.quantity) <= 0
-    ) {
-        return "Quantity must be greater than zero.";
-    }
+    ) return "Quantity must be greater than zero.";
 
-    if (!row.referenceNo) {
-        return "Missing Reference No.";
-    }
+    if (!row.referenceNo) return "Missing Reference No.";
 
-    // Validate BIN
-    if (
-        typeof ALL_BINS !== "undefined" &&
-        Array.isArray(ALL_BINS)
-    ) {
-
-        if (
-            !ALL_BINS.includes(
-                String(row.bin)
-                    .trim()
-                    .toUpperCase()
-            )
-        ) {
-            return "Invalid Bin.";
-        }
-    }
-
-    // Validate Item Code against Masterlist
-    if (
-        typeof masterItems !== "undefined" &&
-        Array.isArray(masterItems)
-    ) {
-
-        const itemExists =
-            masterItems.some(
-                item =>
-                    String(
-                        item.item_code || ""
-                    )
-                    .trim()
-                    .toUpperCase() ===
-                    String(row.itemCode)
-                        .trim()
-                        .toUpperCase()
-            );
-
-        if (!itemExists) {
-            return "Item Code not found in Masterlist.";
-        }
+    if (Array.isArray(masterItems)) {
+        const itemExists = masterItems.some(item =>
+            String(item.item_code || "").trim().toUpperCase() ===
+            String(row.itemCode).trim().toUpperCase()
+        );
+        if (!itemExists) return "Item Code not found in Masterlist.";
     }
 
     return "";
@@ -3439,30 +3387,14 @@ function validateOutboundRow(row) {
 // =====================================================
 
 function setupOutboundTableHeader() {
-
-    if (!outboundTableBody) {
-        return;
-    }
-
-    const table =
-        outboundTableBody.closest("table");
-
-    if (!table) {
-        return;
-    }
-
-    const thead =
-        table.querySelector("thead");
-
-    if (!thead) {
-        return;
-    }
-
+    if (!outboundTableBody) return;
+    const table = outboundTableBody.closest("table");
+    const thead = table?.querySelector("thead");
+    if (!thead) return;
     thead.innerHTML = `
         <tr>
             <th>Item Code</th>
             <th>Warehouse</th>
-            <th>Bin</th>
             <th>Expiry Date</th>
             <th>Quantity</th>
             <th>Reference No.</th>
@@ -3807,22 +3739,6 @@ function setupOutboundUpload() {
                             .toUpperCase();
 
 
-                        const bin =
-                            String(
-                                getOutboundColumn(
-                                    row,
-                                    [
-                                        "Bin",
-                                        "Bin Location",
-                                        "bin_location",
-                                        "BIN"
-                                    ]
-                                ) || ""
-                            )
-                            .trim()
-                            .toUpperCase();
-
-
                         const expiryDate =
                             normalizeOutboundDate(
                                 getOutboundColumn(
@@ -3878,8 +3794,6 @@ function setupOutboundUpload() {
                             itemCode,
 
                             warehouse,
-
-                            bin,
 
                             expiryDate,
 
@@ -3985,137 +3899,28 @@ function setupOutboundUpload() {
 // =====================================================
 
 function renderOutboundPreview() {
-
-    if (!outboundTableBody) {
-        return;
-    }
-
+    if (!outboundTableBody) return;
     outboundTableBody.innerHTML = "";
 
-    if (
-        !pendingOutbound ||
-        pendingOutbound.length === 0
-    ) {
-
-        outboundTableBody.innerHTML = `
-            <tr>
-                <td
-                    colspan="7"
-                    class="empty-state"
-                >
-                    No outbound data loaded.
-                </td>
-            </tr>
-        `;
-
+    if (!pendingOutbound || pendingOutbound.length === 0) {
+        outboundTableBody.innerHTML = `<tr><td colspan="6" class="empty-state">No outbound data loaded.</td></tr>`;
         return;
     }
 
-
-    pendingOutbound.forEach(
-        (row, index) => {
-
-            const validation =
-                validateOutboundRow(row);
-
-            const tr =
-                document.createElement("tr");
-
-            if (validation !== "") {
-                tr.classList.add(
-                    "invalid-row"
-                );
-            }
-
-
-            tr.innerHTML = `
-
-                <td>
-                    <input
-                        type="text"
-                        value="${escapeHtml(row.itemCode || "")}"
-                        data-field="itemCode"
-                        data-index="${index}"
-                        class="outbound-edit-input"
-                    >
-                </td>
-
-                <td>
-                    <input
-                        type="text"
-                        value="${escapeHtml(row.warehouse || "")}"
-                        data-field="warehouse"
-                        data-index="${index}"
-                        class="outbound-edit-input"
-                    >
-                </td>
-
-                <td>
-                    <input
-                        type="text"
-                        value="${escapeHtml(row.bin || "")}"
-                        data-field="bin"
-                        data-index="${index}"
-                        class="outbound-edit-input"
-                    >
-                </td>
-
-                <td>
-                    <input
-                        type="date"
-                        value="${escapeHtml(row.expiryDate || "")}"
-                        data-field="expiryDate"
-                        data-index="${index}"
-                        class="outbound-edit-input"
-                    >
-                </td>
-
-                <td>
-                    <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value="${
-                            Number.isFinite(
-                                Number(row.quantity)
-                            )
-                                ? row.quantity
-                                : ""
-                        }"
-                        data-field="quantity"
-                        data-index="${index}"
-                        class="outbound-edit-input"
-                    >
-                </td>
-
-                <td>
-                    <input
-                        type="text"
-                        value="${escapeHtml(row.referenceNo || "")}"
-                        data-field="referenceNo"
-                        data-index="${index}"
-                        class="outbound-edit-input"
-                    >
-                </td>
-
-                <td>
-                    <button
-                        type="button"
-                        class="outbound-remove-btn"
-                        data-remove-index="${index}"
-                    >
-                        🗑 Remove
-                    </button>
-                </td>
-
-            `;
-
-            outboundTableBody.appendChild(
-                tr
-            );
-        }
-    );
-
+    pendingOutbound.forEach((row, index) => {
+        const validation = validateOutboundRow(row);
+        const tr = document.createElement("tr");
+        if (validation) tr.classList.add("invalid-row");
+        tr.innerHTML = `
+            <td><input type="text" value="${escapeHtml(row.itemCode || "")}" data-field="itemCode" data-index="${index}" class="outbound-edit-input"></td>
+            <td><input type="text" value="${escapeHtml(row.warehouse || "")}" data-field="warehouse" data-index="${index}" class="outbound-edit-input"></td>
+            <td><input type="date" value="${escapeHtml(row.expiryDate || "")}" data-field="expiryDate" data-index="${index}" class="outbound-edit-input"></td>
+            <td><input type="number" min="0" step="0.01" value="${Number.isFinite(Number(row.quantity)) ? row.quantity : ""}" data-field="quantity" data-index="${index}" class="outbound-edit-input"></td>
+            <td><input type="text" value="${escapeHtml(row.referenceNo || "")}" data-field="referenceNo" data-index="${index}" class="outbound-edit-input"></td>
+            <td><button type="button" class="outbound-remove-btn" data-remove-index="${index}">🗑 Remove</button></td>
+        `;
+        outboundTableBody.appendChild(tr);
+    });
     setupOutboundEditing();
 }
 
@@ -4163,8 +3968,7 @@ function setupOutboundEditing() {
 
                 if (
                     field === "itemCode" ||
-                    field === "warehouse" ||
-                    field === "bin"
+                    field === "warehouse"
                 ) {
 
                     value =
@@ -4334,7 +4138,7 @@ function cancelOutboundUpload() {
         outboundTableBody.innerHTML = `
             <tr>
                 <td
-                    colspan="7"
+                    colspan="6"
                     class="empty-state"
                 >
                     No outbound data loaded.
@@ -4355,503 +4159,129 @@ function cancelOutboundUpload() {
 // =====================================================
 
 async function processOutbound() {
-
     if (!isAdmin()) {
-
-        showOutboundMessage(
-            "Only admin users can process outbound transactions.",
-            "error"
-        );
-
+        showOutboundMessage("Only admin users can process outbound transactions.", "error");
+        return;
+    }
+    if (!Array.isArray(pendingOutbound) || pendingOutbound.length === 0) {
+        showOutboundMessage("Please upload and preview an outbound Excel file first.", "error");
         return;
     }
 
-
-    if (
-        !pendingOutbound ||
-        pendingOutbound.length === 0
-    ) {
-
-        showOutboundMessage(
-            "Please upload and preview an outbound Excel file first.",
-            "error"
-        );
-
+    const invalidRows = pendingOutbound.map((row, index) => ({ rowNumber: index + 2, error: validateOutboundRow(row) })).filter(row => row.error);
+    if (invalidRows.length) {
+        const first = invalidRows[0];
+        showOutboundMessage(`Cannot process. Excel row ${first.rowNumber}: ${first.error}`, "error");
         return;
     }
 
-
-    // ================================================
-    // VALIDATE ALL ROWS
-    // ================================================
-
-    const invalidRows =
-        pendingOutbound
-            .map(
-                (row, index) => ({
-                    rowNumber:
-                        index + 2,
-
-                    error:
-                        validateOutboundRow(
-                            row
-                        )
-                })
-            )
-            .filter(
-                row =>
-                    row.error
-            );
-
-
-    if (
-        invalidRows.length > 0
-    ) {
-
-        const firstError =
-            invalidRows[0];
-
-        showOutboundMessage(
-            `Cannot process. Excel row ${firstError.rowNumber}: ${firstError.error}`,
-            "error"
-        );
-
+    showOutboundMessage("Validating total stock and bin allocation...", "info");
+    const inventoryLoaded = await loadInventory();
+    if (inventoryLoaded !== true) {
+        showOutboundMessage("Unable to load current inventory. Nothing was processed.", "error");
         return;
     }
-
-
-    // ================================================
-    // LOAD CURRENT INVENTORY
-    // ================================================
-
-    showOutboundMessage(
-        "Validating available inventory...",
-        "info"
-    );
-
-    await loadInventory();
-
-
-    // ================================================
-    // BUILD STOCK MAP
-    //
-    // EXACT MATCH:
-    // ITEM CODE
-    // WAREHOUSE
-    // BIN
-    // EXPIRY DATE
-    //
-    // NO FEFO
-    // ================================================
-
-    const stockMap = {};
-
-
-    currentInventoryData.forEach(
-        row => {
-
-            const itemCode =
-                String(
-                    row.master_items?.item_code ||
-                    ""
-                )
-                .trim()
-                .toUpperCase();
-
-
-            const warehouse =
-                String(
-                    row.warehouse_location ||
-                    ""
-                )
-                .trim()
-                .toUpperCase();
-
-
-            const bin =
-                String(
-                    row.bin_location ||
-                    ""
-                )
-                .trim()
-                .toUpperCase();
-
-
-            const expiryDate =
-                normalizeOutboundDate(
-                    row.expiry_date
-                );
-
-
-            const key =
-                `${itemCode}||${warehouse}||${bin}||${expiryDate}`;
-
-
-            if (!stockMap[key]) {
-                stockMap[key] = 0;
-            }
-
-
-            stockMap[key] +=
-                Number(
-                    row.quantity || 0
-                );
-        }
-    );
-
-
-    // ================================================
-    // REQUIRED QUANTITY MAP
-    // ================================================
-
-    const requiredMap = {};
-
-
-    pendingOutbound.forEach(
-        row => {
-
-            const key =
-                `${row.itemCode}||${row.warehouse}||${row.bin}||${row.expiryDate}`;
-
-
-            if (!requiredMap[key]) {
-                requiredMap[key] = 0;
-            }
-
-
-            requiredMap[key] +=
-                Number(
-                    row.quantity
-                );
-        }
-    );
-
-
-    // ================================================
-    // CHECK STOCK FIRST
-    // ================================================
-
-    for (
-        const key in requiredMap
-    ) {
-
-        const available =
-            stockMap[key] || 0;
-
-        const required =
-            requiredMap[key];
-
-
-        if (
-            required >
-            available
-        ) {
-
-            showOutboundMessage(
-                `Insufficient stock for ${key.replaceAll("||", " / ")}. Required: ${required}, Available: ${available}`,
-                "error"
-            );
-
-            return;
-        }
-    }
-
-
-    // ================================================
-    // PROCESS
-    // ================================================
-
-    showOutboundMessage(
-        "Stock validated. Processing outbound...",
-        "info"
-    );
-
 
     try {
+        const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+        if (userError) throw userError;
+        if (!user) throw new Error("Your session has expired. Please login again.");
 
-        const {
-            data: {
-                user
+        // Group outbound demand by exact Item Code + Warehouse + Expiry Date.
+        const keyFor = (itemCode, warehouse, expiryDate) =>
+            `${String(itemCode || "").trim().toUpperCase()}||${String(warehouse || "").trim().toUpperCase()}||${normalizeOutboundDate(expiryDate)}`;
+
+        const demandMap = new Map();
+        for (const row of pendingOutbound) {
+            const key = keyFor(row.itemCode, row.warehouse, row.expiryDate);
+            const existing = demandMap.get(key) || { itemCode: row.itemCode, warehouse: row.warehouse, expiryDate: row.expiryDate, quantity: 0 };
+            existing.quantity += Number(row.quantity);
+            demandMap.set(key, existing);
+        }
+
+        // Aggregate stock across every bin that matches the exact item, warehouse and expiry.
+        const inventoryGroups = new Map();
+        for (const inv of currentInventoryData) {
+            const itemCode = String(inv.master_items?.item_code || "").trim().toUpperCase();
+            const warehouse = String(inv.warehouse_location || "").trim().toUpperCase();
+            const expiryDate = normalizeOutboundDate(inv.expiry_date);
+            const key = keyFor(itemCode, warehouse, expiryDate);
+            if (!inventoryGroups.has(key)) inventoryGroups.set(key, []);
+            inventoryGroups.get(key).push(inv);
+        }
+
+        // CHECK TOTAL STOCK FIRST; no database changes occur until all demand passes.
+        for (const [key, demand] of demandMap) {
+            const rows = inventoryGroups.get(key) || [];
+            const available = rows.reduce((sum, inv) => sum + Math.max(0, Number(inv.quantity || 0)), 0);
+            if (demand.quantity > available) {
+                showOutboundMessage(`Insufficient total stock for ${demand.itemCode} / ${demand.warehouse} / ${demand.expiryDate}. Required: ${demand.quantity}, Available: ${available}. Nothing was processed.`, "error");
+                return;
             }
-        } =
-            await supabaseClient.auth.getUser();
+        }
 
-
-        if (!user) {
-
-            throw new Error(
-                "Your session has expired. Please login again."
+        // Plan deductions in ascending bin order, keeping a simulated balance so duplicate
+        // outbound rows cannot over-allocate the same inventory record.
+        const simulatedQty = new Map();
+        const allocationPlan = [];
+        for (const row of pendingOutbound) {
+            let remaining = Number(row.quantity);
+            const key = keyFor(row.itemCode, row.warehouse, row.expiryDate);
+            const matches = (inventoryGroups.get(key) || []).slice().sort((a, b) =>
+                String(a.bin_location || "").trim().toUpperCase().localeCompare(String(b.bin_location || "").trim().toUpperCase(), undefined, { numeric: true, sensitivity: "base" }) ||
+                String(a.id).localeCompare(String(b.id), undefined, { numeric: true })
             );
-        }
 
-
-        // ============================================
-        // EACH OUTBOUND ROW
-        // ============================================
-
-        for (
-            const row
-            of pendingOutbound
-        ) {
-
-            let remaining =
-                Number(
-                    row.quantity
-                );
-
-
-            // ========================================
-            // EXACT INVENTORY MATCH
-            // ========================================
-
-            const matchingInventory =
-                currentInventoryData.filter(
-                    item => {
-
-                        const itemCode =
-                            String(
-                                item.master_items?.item_code ||
-                                ""
-                            )
-                            .trim()
-                            .toUpperCase();
-
-
-                        const warehouse =
-                            String(
-                                item.warehouse_location ||
-                                ""
-                            )
-                            .trim()
-                            .toUpperCase();
-
-
-                        const bin =
-                            String(
-                                item.bin_location ||
-                                ""
-                            )
-                            .trim()
-                            .toUpperCase();
-
-
-                        const expiryDate =
-                            normalizeOutboundDate(
-                                item.expiry_date
-                            );
-
-
-                        return (
-
-                            itemCode ===
-                                row.itemCode &&
-
-                            warehouse ===
-                                row.warehouse &&
-
-                            bin ===
-                                row.bin &&
-
-                            expiryDate ===
-                                row.expiryDate &&
-
-                            Number(
-                                item.quantity || 0
-                            ) > 0
-                        );
-                    }
-                );
-
-
-            // ========================================
-            // DEDUCT
-            // ========================================
-
-            for (
-                const inventoryRow
-                of matchingInventory
-            ) {
-
-                if (
-                    remaining <= 0
-                ) {
-                    break;
-                }
-
-
-                const available =
-                    Number(
-                        inventoryRow.quantity ||
-                        0
-                    );
-
-
-                if (
-                    available <= 0
-                ) {
-                    continue;
-                }
-
-
-                const deduct =
-                    Math.min(
-                        remaining,
-                        available
-                    );
-
-
-                const newQuantity =
-                    available -
-                    deduct;
-
-
-                // ==================================
-                // UPDATE INVENTORY
-                // ==================================
-
-                const {
-                    error:
-                        updateError
-                } =
-                    await supabaseClient
-                        .from(
-                            "inventory"
-                        )
-                        .update({
-                            quantity:
-                                newQuantity
-                        })
-                        .eq(
-                            "id",
-                            inventoryRow.id
-                        );
-
-
-                if (
-                    updateError
-                ) {
-                    throw updateError;
-                }
-
-
-                // ==================================
-                // TRANSACTION HISTORY
-                // ==================================
-
-                const {
-                    error:
-                        transactionError
-                } =
-                    await supabaseClient
-                        .from(
-                            "inventory_transactions"
-                        )
-                        .insert({
-
-                            item_id:
-                                inventoryRow.item_id,
-
-                            transaction_type:
-                                "OUTBOUND",
-
-                            warehouse_location:
-                                inventoryRow.warehouse_location,
-
-                            bin_location:
-                                inventoryRow.bin_location,
-
-                            expiry_date:
-                                inventoryRow.expiry_date,
-
-                            quantity_change:
-                                -deduct,
-
-                            reference_no:
-                                row.referenceNo,
-
-                            created_by:
-                                user.id
-                        });
-
-
-                if (
-                    transactionError
-                ) {
-                    throw transactionError;
-                }
-
-
-                remaining -=
-                    deduct;
+            for (const inv of matches) {
+                if (remaining <= 0) break;
+                const available = simulatedQty.has(inv.id) ? simulatedQty.get(inv.id) : Math.max(0, Number(inv.quantity || 0));
+                if (available <= 0) continue;
+                const deduct = Math.min(remaining, available);
+                allocationPlan.push({ inventoryRow: inv, deduct, referenceNo: row.referenceNo, itemCode: row.itemCode, warehouse: row.warehouse, expiryDate: row.expiryDate });
+                simulatedQty.set(inv.id, available - deduct);
+                remaining -= deduct;
             }
-
-
-            // ========================================
-            // SAFETY CHECK
-            // ========================================
-
-            if (
-                remaining > 0
-            ) {
-
-                throw new Error(
-                    `Unable to deduct complete quantity for ${row.itemCode} / ${row.warehouse} / ${row.bin} / ${row.expiryDate}.`
-                );
+            if (remaining > 0) {
+                // Defensive guard; total-stock validation above should make this unreachable.
+                throw new Error(`Unable to allocate complete quantity for ${row.itemCode} / ${row.warehouse} / ${row.expiryDate}. Nothing was processed.`);
             }
         }
 
+        showOutboundMessage(`Stock validated. Processing ${allocationPlan.length} bin allocation(s)...`, "info");
+        const appliedQty = new Map();
+        for (const allocation of allocationPlan) {
+            const inv = allocation.inventoryRow;
+            const previousApplied = appliedQty.get(inv.id) || 0;
+            const newQuantity = Number(inv.quantity || 0) - previousApplied - allocation.deduct;
+            if (newQuantity < 0) throw new Error(`Safety check stopped a negative quantity for ${allocation.itemCode} / ${inv.bin_location}.`);
 
-        // ================================================
-        // SUCCESS
-        // ================================================
+            const { error: updateError } = await supabaseClient.from("inventory").update({ quantity: newQuantity }).eq("id", inv.id);
+            if (updateError) throw updateError;
+            appliedQty.set(inv.id, previousApplied + allocation.deduct);
+
+            // Keep one OUTBOUND audit row per bin deduction, including the actual bin used.
+            const { error: transactionError } = await supabaseClient.from("inventory_transactions").insert({
+                item_id: inv.item_id,
+                transaction_type: "OUTBOUND",
+                warehouse_location: inv.warehouse_location,
+                bin_location: inv.bin_location,
+                expiry_date: inv.expiry_date,
+                quantity_change: -allocation.deduct,
+                reference_no: allocation.referenceNo,
+                created_by: user.id
+            });
+            if (transactionError) throw transactionError;
+        }
 
         pendingOutbound = [];
-
-        if (outboundFile) {
-            outboundFile.value = "";
-        }
-
-        if (outboundTableBody) {
-
-            outboundTableBody.innerHTML = `
-                <tr>
-                    <td
-                        colspan="7"
-                        class="empty-state"
-                    >
-                        No outbound data loaded.
-                    </td>
-                </tr>
-            `;
-        }
-
-
-        showOutboundMessage(
-            "Outbound processed successfully.",
-            "success"
-        );
-
-
-        // ================================================
-        // REFRESH INVENTORY + SUMMARY
-        // ================================================
-
+        if (outboundFile) outboundFile.value = "";
+        if (outboundTableBody) outboundTableBody.innerHTML = `<tr><td colspan="6" class="empty-state">No outbound data loaded.</td></tr>`;
+        showOutboundMessage("Outbound processed successfully. Stock was deducted from the lowest bin locations first, using only matching item, warehouse, and exact expiry date. Audit trail saved per bin.", "success");
         await loadInventory();
-
         await loadInventorySummary();
-
-
     } catch (error) {
-
-        console.error(
-            "Outbound processing error:",
-            error
-        );
-
-        showOutboundMessage(
-            `Outbound processing failed: ${error.message || "Unknown error"}`,
-            "error"
-        );
+        console.error("Outbound processing error:", error);
+        showOutboundMessage(`Outbound processing failed: ${error.message || "Unknown error"}. If processing began before the error, check Current Inventory and Transaction History before retrying.`, "error");
     }
 }
 
