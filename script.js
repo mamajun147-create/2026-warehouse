@@ -1492,86 +1492,131 @@ function addInventoryToPendingTable() {
 // RENDER PENDING INVENTORY
 // =====================================================
 
+
 function renderPendingInventory() {
+    if (!pendingInventoryTableBody) return;
 
     pendingInventoryTableBody.innerHTML = "";
 
+    pendingInventory.forEach((item, index) => {
+        const row = document.createElement("tr");
 
-    pendingInventory.forEach(
-        (item, index) => {
-
-            const row =
-                document.createElement("tr");
-
-
-            row.innerHTML = `
-                <td>
-                    ${escapeHtml(item.item_code)}
-                </td>
-
-                <td>
-                    ${escapeHtml(
-                        item.item_description
-                    )}
-                </td>
-
-                <td>
-                    ${escapeHtml(
-                        item.warehouse_location
-                    )}
-                </td>
-
-                <td>
-                    ${escapeHtml(
-                        item.bin_location
-                    )}
-                </td>
-
-                <td>
-                    ${formatDate(item.expiry_date)}
-                </td>
-
-                <td>
-                    ${Number(item.quantity).toLocaleString()}
-                </td>
-
-                <td>
-                    <button
-                        type="button"
+        row.innerHTML = `
+            <td>${escapeHtml(item.item_code || "")}</td>
+            <td>${escapeHtml(item.item_description || "")}</td>
+            <td>
+                <input type="text"
+                    class="pending-edit-warehouse"
+                    value="${escapeHtml(item.warehouse_location || "")}"
+                    aria-label="Warehouse"
+                    style="width:110px">
+            </td>
+            <td>
+                <input type="text"
+                    class="pending-edit-bin"
+                    value="${escapeHtml(item.bin_location || "")}"
+                    aria-label="Bin"
+                    style="width:110px">
+            </td>
+            <td>
+                <input type="date"
+                    class="pending-edit-expiry"
+                    value="${escapeHtml(item.expiry_date || "")}"
+                    aria-label="Expiry date">
+            </td>
+            <td>
+                <input type="number"
+                    class="pending-edit-quantity"
+                    value="${Number(item.quantity || 0)}"
+                    min="1"
+                    step="1"
+                    aria-label="Quantity"
+                    style="width:90px">
+            </td>
+            <td>
+                <div class="action-buttons">
+                    <button type="button"
+                        class="primary-btn"
+                        onclick="updatePendingInventory(${index})">
+                        UPDATE
+                    </button>
+                    <button type="button"
                         class="secondary-btn"
-                        onclick="removePendingInventory(${index})"
-                    >
+                        onclick="removePendingInventory(${index})">
                         REMOVE
                     </button>
-                </td>
-            `;
+                </div>
+            </td>
+        `;
 
-
-            pendingInventoryTableBody.appendChild(row);
-
-        }
-    );
-
+        pendingInventoryTableBody.appendChild(row);
+    });
 }
+
 
 
 // =====================================================
 // REMOVE PENDING ITEM
 // =====================================================
 
-function removePendingInventory(index) {
 
-    pendingInventory.splice(index, 1);
+function updatePendingInventory(index) {
+    const row = pendingInventoryTableBody.querySelectorAll("tr")[index];
+
+    if (!row || !pendingInventory[index]) return;
+
+    const warehouseInput = row.querySelector(".pending-edit-warehouse");
+    const binInput = row.querySelector(".pending-edit-bin");
+    const expiryInput = row.querySelector(".pending-edit-expiry");
+    const quantityInput = row.querySelector(".pending-edit-quantity");
+
+    const newWarehouse = warehouseInput.value.trim();
+    const newBin = binInput.value.trim().toUpperCase();
+    const newExpiry = expiryInput.value;
+    const newQuantity = Number(quantityInput.value);
+
+    if (!newWarehouse) {
+        alert("Please enter a Warehouse.");
+        warehouseInput.focus();
+        return;
+    }
+
+    if (!ALL_BINS.includes(newBin)) {
+        alert("Invalid Bin Location. Please select a valid bin.");
+        binInput.focus();
+        return;
+    }
+
+    if (!newExpiry) {
+        alert("Please enter an Expiry Date.");
+        expiryInput.focus();
+        return;
+    }
+
+    if (!quantityInput.value || !Number.isFinite(newQuantity) ||
+        !Number.isInteger(newQuantity) || newQuantity <= 0) {
+        alert("Quantity must be a whole number greater than 0.");
+        quantityInput.focus();
+        return;
+    }
+
+    pendingInventory[index] = {
+        ...pendingInventory[index],
+        warehouse_location: newWarehouse,
+        bin_location: newBin,
+        expiry_date: newExpiry,
+        quantity: newQuantity
+    };
 
     renderPendingInventory();
+    window.updatePendingInventory = updatePendingInventory;
 
+    showMessage(
+        inventoryMessage,
+        "Pending item updated. Press SAVE ALL to save it to inventory.",
+        "success"
+    );
 }
-
-
-// Make function available to HTML
-window.removePendingInventory =
-    removePendingInventory;
-
 
 // =====================================================
 // SAVE ALL INVENTORY
