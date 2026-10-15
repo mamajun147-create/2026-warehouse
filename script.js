@@ -2144,7 +2144,35 @@ function renderInventoryTable(data) {
 
     inventoryTableBody.innerHTML = "";
 
-    data.forEach(row => {
+    // Automatic display sorting: Item Code A-Z, earliest expiry first
+    // within each item code, then Bin Location A-Z for matching expiry.
+    const sortedData = [...data].sort((a, b) => {
+        const itemA = a.master_items || {};
+        const itemB = b.master_items || {};
+
+        const codeCompare = String(itemA.item_code || "").localeCompare(
+            String(itemB.item_code || ""),
+            undefined,
+            { numeric: true, sensitivity: "base" }
+        );
+        if (codeCompare !== 0) return codeCompare;
+
+        const expiryA = String(a.expiry_date || "");
+        const expiryB = String(b.expiry_date || "");
+        if (!expiryA && expiryB) return 1;
+        if (expiryA && !expiryB) return -1;
+
+        const expiryCompare = expiryA.localeCompare(expiryB);
+        if (expiryCompare !== 0) return expiryCompare;
+
+        return String(a.bin_location || "").localeCompare(
+            String(b.bin_location || ""),
+            undefined,
+            { numeric: true, sensitivity: "base" }
+        );
+    });
+
+    sortedData.forEach(row => {
 
         const item = row.master_items || {};
 
