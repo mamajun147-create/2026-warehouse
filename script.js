@@ -191,11 +191,52 @@ const transferResult = document.getElementById("transferResult");
 
 
 // =====================================================
+// HYBRID PREMIUM THEME (LIGHT / DARK)
+// =====================================================
+
+function setupThemeToggle() {
+    const root = document.documentElement;
+    const button = document.getElementById("themeToggleBtn");
+    if (!button) return;
+
+    let savedTheme = "light";
+    try {
+        savedTheme = localStorage.getItem("warehouseTheme") || "light";
+    } catch (error) {
+        // The theme toggle still works if browser storage is unavailable.
+    }
+
+    function applyTheme(theme, save = false) {
+        const dark = theme === "dark";
+        root.setAttribute("data-theme", dark ? "dark" : "light");
+        button.textContent = dark ? "☀️ Light Mode" : "🌙 Dark Mode";
+        button.setAttribute("aria-pressed", String(dark));
+        button.setAttribute("aria-label", dark ? "Switch to Light Mode" : "Switch to Dark Mode");
+
+        if (save) {
+            try {
+                localStorage.setItem("warehouseTheme", dark ? "dark" : "light");
+            } catch (error) {
+                // Ignore storage restrictions; theme is applied for this session.
+            }
+        }
+    }
+
+    applyTheme(savedTheme === "dark" ? "dark" : "light");
+    button.addEventListener("click", () => {
+        const nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        applyTheme(nextTheme, true);
+    });
+}
+
+
+// =====================================================
 // INITIALIZATION
 // =====================================================
 
 document.addEventListener("DOMContentLoaded", async () => {
 
+    setupThemeToggle();
     setupMenu();
 
     setupLogin();
@@ -1812,6 +1853,7 @@ async function loadInventory() {
 
     currentInventoryData = data || [];
 
+    updateDashboardCards(currentInventoryData);
     populateInventoryLocationFilter(currentInventoryData);
     applyInventoryFilters();
 
@@ -1968,6 +2010,78 @@ function applyInventoryFilters() {
 // CURRENT INVENTORY TABLE
 // =====================================================
 
+function getExpiryStatus(expiryValue) {
+    if (!expiryValue) {
+        return { key: "no-expiry", label: "No Expiry", days: null };
+    }
+
+    // Parse date-only values as local dates to avoid timezone day shifts.
+    const parts = String(expiryValue).split("-").map(Number);
+    let expiry;
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+        expiry = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+        expiry = new Date(expiryValue);
+    }
+
+    if (Number.isNaN(expiry.getTime())) {
+        return { key: "no-expiry", label: "Check Date", days: null };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expiry.setHours(0, 0, 0, 0);
+    const days = Math.round((expiry.getTime() - today.getTime()) / 86400000);
+
+    if (days < 0) return { key: "expired", label: "Expired", days };
+    if (days <= 30) return { key: "expiring", label: days === 0 ? "Expires Today" : `Expires in ${days}d`, days };
+    return { key: "good", label: "Good", days };
+}
+
+function renderExpiryBadge(expiryValue) {
+    const status = getExpiryStatus(expiryValue);
+    const dateText = formatDate(expiryValue) || "—";
+    return `<span class="expiry-cell"><span>${escapeHtml(dateText)}</span><span class="expiry-badge expiry-${status.key}">${escapeHtml(status.label)}</span></span>`;
+}
+
+function updateDashboardCards(data) {
+    const rows = Array.isArray(data) ? data : [];
+    const uniqueItems = new Set();
+    const warehouses = new Set();
+    let totalQuantity = 0;
+    let expiringSoon = 0;
+
+    rows.forEach(row => {
+        const item = row.master_items || {};
+        const itemKey = String(item.item_code || row.item_id || "").trim();
+        if (itemKey) uniqueItems.add(itemKey.toLowerCase());
+
+        const warehouseName = String(row.warehouse_location || "").trim();
+        if (warehouseName) warehouses.add(warehouseName);
+
+        const quantityValue = Number(row.quantity || 0);
+        if (Number.isFinite(quantityValue)) totalQuantity += quantityValue;
+
+        const status = getExpiryStatus(row.expiry_date);
+        if (status.key === "expiring") expiringSoon += 1;
+    });
+
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    setText("dashboardTotalItems", uniqueItems.size.toLocaleString());
+    setText("dashboardTotalQuantity", totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+    setText("dashboardWarehouses", warehouses.size.toLocaleString());
+    setText("dashboardExpiringSoon", expiringSoon.toLocaleString());
+}
+
+
+// =====================================================
+// CURRENT INVENTORY TABLE RENDERER
+// =====================================================
+
 function renderInventoryTable(data) {
 
     inventoryTableBody.innerHTML = "";
@@ -1983,7 +2097,7 @@ function renderInventoryTable(data) {
             <td>${escapeHtml(item.item_description || "")}</td>
             <td>${escapeHtml(row.warehouse_location || "")}</td>
             <td>${escapeHtml(row.bin_location || "")}</td>
-            <td>${formatDate(row.expiry_date)}</td>
+            <td>${renderExpiryBadge(row.expiry_date)}</td>
             <td>${Number(row.quantity || 0).toLocaleString()}</td>
             <td class="admin-only">
                 ${isAdmin() ? `<div class="action-buttons">
@@ -2292,10 +2406,12 @@ function setupSummary() {
     );
 
 
-    summaryWarehouse.addEventListener(
-        "change",
-        loadInventorySummary
-    );
+    if (summaryWarehouse) {
+        summaryWarehouse.addEventListener(
+            "change",
+            loadInventorySummary
+        );
+    }
 
 }
 
@@ -2496,8 +2612,10 @@ function renderSummaryTable(data) {
         }
 
 
-        return a.expiry_date.localeCompare(
-            b.expiry_date
+        if (!a.expiry_date && b.expiry_date) return 1;
+        if (a.expiry_date && !b.expiry_date) return -1;
+        return String(a.expiry_date || "").localeCompare(
+            String(b.expiry_date || "")
         );
 
     });
@@ -2535,9 +2653,7 @@ function renderSummaryTable(data) {
             </td>
 
             <td>
-                ${formatDate(
-                    row.expiry_date
-                )}
+                ${renderExpiryBadge(row.expiry_date)}
             </td>
 
             <td>
@@ -2919,23 +3035,26 @@ function formatDate(dateValue) {
 // OUTBOUND UPLOAD
 // =====================================================
 
-
-
-// =====================================================
-// NORMALIZE OUTBOUND DATE
-// =====================================================
-
 function normalizeOutboundDate(value) {
 
-    if (value === null || value === undefined || value === "") {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
         return "";
     }
 
     // JavaScript Date
-    if (value instanceof Date && !isNaN(value.getTime())) {
+    if (
+        value instanceof Date &&
+        !isNaN(value.getTime())
+    ) {
         const year = value.getFullYear();
-        const month = String(value.getMonth() + 1).padStart(2, "0");
-        const day = String(value.getDate()).padStart(2, "0");
+        const month =
+            String(value.getMonth() + 1).padStart(2, "0");
+        const day =
+            String(value.getDate()).padStart(2, "0");
 
         return `${year}-${month}-${day}`;
     }
@@ -2943,69 +3062,91 @@ function normalizeOutboundDate(value) {
     // Excel serial date
     if (typeof value === "number") {
 
-        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        const date = new Date(
-            excelEpoch.getTime() + value * 86400000
-        );
+        const excelEpoch =
+            new Date(Date.UTC(1899, 11, 30));
+
+        const date =
+            new Date(
+                excelEpoch.getTime() +
+                value * 86400000
+            );
 
         if (!isNaN(date.getTime())) {
 
-            const year = date.getUTCFullYear();
-            const month = String(
-                date.getUTCMonth() + 1
-            ).padStart(2, "0");
+            const year =
+                date.getUTCFullYear();
 
-            const day = String(
-                date.getUTCDate()
-            ).padStart(2, "0");
+            const month =
+                String(
+                    date.getUTCMonth() + 1
+                ).padStart(2, "0");
+
+            const day =
+                String(
+                    date.getUTCDate()
+                ).padStart(2, "0");
 
             return `${year}-${month}-${day}`;
         }
     }
 
-    const text = String(value).trim();
+    const text =
+        String(value).trim();
 
     if (!text) {
         return "";
     }
 
     // YYYY-MM-DD
-    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text)) {
+    if (
+        /^\d{4}-\d{1,2}-\d{1,2}$/.test(text)
+    ) {
 
-        const parts = text.split("-");
+        const parts =
+            text.split("-");
 
         return `${parts[0]}-${String(parts[1]).padStart(2, "0")}-${String(parts[2]).padStart(2, "0")}`;
     }
 
     // MM/DD/YYYY
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)) {
+    if (
+        /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(text)
+    ) {
 
-        const parts = text.split("/");
+        const parts =
+            text.split("/");
 
         return `${parts[2]}-${String(parts[0]).padStart(2, "0")}-${String(parts[1]).padStart(2, "0")}`;
     }
 
     // MM-DD-YYYY
-    if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(text)) {
+    if (
+        /^\d{1,2}-\d{1,2}-\d{4}$/.test(text)
+    ) {
 
-        const parts = text.split("-");
+        const parts =
+            text.split("-");
 
         return `${parts[2]}-${String(parts[0]).padStart(2, "0")}-${String(parts[1]).padStart(2, "0")}`;
     }
 
-    // Try normal JS date
-    const parsed = new Date(text);
+    const parsed =
+        new Date(text);
 
     if (!isNaN(parsed.getTime())) {
 
-        const year = parsed.getFullYear();
-        const month = String(
-            parsed.getMonth() + 1
-        ).padStart(2, "0");
+        const year =
+            parsed.getFullYear();
 
-        const day = String(
-            parsed.getDate()
-        ).padStart(2, "0");
+        const month =
+            String(
+                parsed.getMonth() + 1
+            ).padStart(2, "0");
+
+        const day =
+            String(
+                parsed.getDate()
+            ).padStart(2, "0");
 
         return `${year}-${month}-${day}`;
     }
@@ -3018,20 +3159,40 @@ function normalizeOutboundDate(value) {
 // GET OUTBOUND COLUMN
 // =====================================================
 
-function getOutboundColumn(row, possibleNames) {
+function getOutboundColumn(row, names) {
 
     if (!row) {
         return "";
     }
 
-    const keys = Object.keys(row);
+    for (const name of names) {
 
-    for (const possibleName of possibleNames) {
+        if (
+            Object.prototype.hasOwnProperty.call(
+                row,
+                name
+            )
+        ) {
+            return row[name];
+        }
+    }
 
-        const foundKey = keys.find(key =>
-            String(key).trim().toLowerCase() ===
-            String(possibleName).trim().toLowerCase()
-        );
+    // Case-insensitive fallback
+    const rowKeys =
+        Object.keys(row);
+
+    for (const name of names) {
+
+        const foundKey =
+            rowKeys.find(
+                key =>
+                    String(key)
+                        .trim()
+                        .toLowerCase() ===
+                    String(name)
+                        .trim()
+                        .toLowerCase()
+            );
 
         if (foundKey !== undefined) {
             return row[foundKey];
@@ -3046,15 +3207,20 @@ function getOutboundColumn(row, possibleNames) {
 // SHOW OUTBOUND MESSAGE
 // =====================================================
 
-function showOutboundMessage(message, type = "") {
+function showOutboundMessage(
+    message,
+    type = ""
+) {
 
     if (!outboundMessage) {
         return;
     }
 
-    outboundMessage.textContent = message || "";
+    outboundMessage.textContent =
+        message || "";
 
-    outboundMessage.className = "message";
+    outboundMessage.className =
+        "message";
 
     if (type) {
         outboundMessage.classList.add(type);
@@ -3073,33 +3239,76 @@ function validateOutboundRow(row) {
     }
 
     if (!row.itemCode) {
-        return "Item Code is required.";
+        return "Missing Item Code.";
     }
 
     if (!row.warehouse) {
-        return "Warehouse is required.";
+        return "Missing Warehouse.";
     }
 
     if (!row.bin) {
-        return "Bin is required.";
+        return "Missing Bin.";
     }
 
     if (!row.expiryDate) {
-        return "Expiry Date is required.";
+        return "Missing Expiry Date.";
     }
 
     if (
         row.quantity === "" ||
         row.quantity === null ||
-        row.quantity === undefined
+        row.quantity === undefined ||
+        !Number.isFinite(
+            Number(row.quantity)
+        ) ||
+        Number(row.quantity) <= 0
     ) {
-        return "Quantity is required.";
+        return "Quantity must be greater than zero.";
     }
 
-    const quantity = Number(row.quantity);
+    if (!row.referenceNo) {
+        return "Missing Reference No.";
+    }
 
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-        return "Quantity must be greater than zero.";
+    // Validate BIN
+    if (
+        typeof ALL_BINS !== "undefined" &&
+        Array.isArray(ALL_BINS)
+    ) {
+
+        if (
+            !ALL_BINS.includes(
+                String(row.bin)
+                    .trim()
+                    .toUpperCase()
+            )
+        ) {
+            return "Invalid Bin.";
+        }
+    }
+
+    // Validate Item Code against Masterlist
+    if (
+        typeof masterItems !== "undefined" &&
+        Array.isArray(masterItems)
+    ) {
+
+        const itemExists =
+            masterItems.some(
+                item =>
+                    String(
+                        item.item_code || ""
+                    )
+                    .trim()
+                    .toUpperCase() ===
+                    String(row.itemCode)
+                        .trim()
+                        .toUpperCase()
+            );
+
+        if (!itemExists) {
+            return "Item Code not found in Masterlist.";
+        }
     }
 
     return "";
@@ -3107,7 +3316,7 @@ function validateOutboundRow(row) {
 
 
 // =====================================================
-// SETUP OUTBOUND TABLE HEADER
+// OUTBOUND TABLE HEADER
 // =====================================================
 
 function setupOutboundTableHeader() {
@@ -3116,13 +3325,15 @@ function setupOutboundTableHeader() {
         return;
     }
 
-    const table = outboundTableBody.closest("table");
+    const table =
+        outboundTableBody.closest("table");
 
     if (!table) {
         return;
     }
 
-    const thead = table.querySelector("thead");
+    const thead =
+        table.querySelector("thead");
 
     if (!thead) {
         return;
@@ -3148,76 +3359,116 @@ function setupOutboundTableHeader() {
 
 function setupOutboundUpload() {
 
-    setupOutboundTableHeader();
+    if (
+        !outboundFile ||
+        !previewOutboundBtn
+    ) {
 
-    if (!outboundFile) {
-        console.warn("Outbound file input not found.");
+        console.warn(
+            "Outbound Upload elements not found."
+        );
+
         return;
     }
 
-    if (previewOutboundBtn) {
+    setupOutboundTableHeader();
 
-        previewOutboundBtn.addEventListener(
-            "click",
-            async function () {
 
-                try {
+    // =================================================
+    // PREVIEW
+    // =================================================
 
-                    if (!outboundFile.files.length) {
+    previewOutboundBtn.addEventListener(
+        "click",
+        async function () {
 
-                        showOutboundMessage(
-                            "Please select an Excel file first.",
-                            "error"
-                        );
+            if (!isAdmin()) {
 
-                        return;
-                    }
+                showOutboundMessage(
+                    "Only admin users can process outbound transactions.",
+                    "error"
+                );
 
-                    const file = outboundFile.files[0];
+                return;
+            }
 
-                    showOutboundMessage(
-                        "Reading outbound Excel file...",
-                        "info"
-                    );
+            const file =
+                outboundFile.files[0];
 
-                    const arrayBuffer =
-                        await file.arrayBuffer();
+            if (!file) {
 
-                    const workbook =
-                        XLSX.read(arrayBuffer, {
+                showOutboundMessage(
+                    "Please select an Excel file first.",
+                    "error"
+                );
+
+                return;
+            }
+
+            try {
+
+                showOutboundMessage(
+                    "Reading outbound file...",
+                    "info"
+                );
+
+                const arrayBuffer =
+                    await file.arrayBuffer();
+
+                const workbook =
+                    XLSX.read(
+                        arrayBuffer,
+                        {
                             type: "array",
                             cellDates: true
-                        });
+                        }
+                    );
 
-                    const firstSheetName =
-                        workbook.SheetNames[0];
+                if (
+                    !workbook.SheetNames ||
+                    workbook.SheetNames.length === 0
+                ) {
 
-                    const worksheet =
-                        workbook.Sheets[firstSheetName];
+                    throw new Error(
+                        "No worksheet found."
+                    );
+                }
 
-                    const rows =
-                        XLSX.utils.sheet_to_json(
-                            worksheet,
-                            {
-                                defval: ""
-                            }
-                        );
+                const firstSheet =
+                    workbook.Sheets[
+                        workbook.SheetNames[0]
+                    ];
 
-                    if (!rows.length) {
+                const rows =
+                    XLSX.utils.sheet_to_json(
+                        firstSheet,
+                        {
+                            defval: "",
+                            raw: true
+                        }
+                    );
 
-                        pendingOutbound = [];
+                if (!rows.length) {
 
-                        renderOutboundPreview();
+                    showOutboundMessage(
+                        "The Excel file is empty.",
+                        "error"
+                    );
 
-                        showOutboundMessage(
-                            "The Excel file has no data.",
-                            "error"
-                        );
+                    pendingOutbound = [];
 
-                        return;
-                    }
+                    renderOutboundPreview();
 
-                    pendingOutbound = rows.map(row => {
+                    return;
+                }
+
+
+                // =========================================
+                // CONVERT EXCEL ROWS
+                // =========================================
+
+                pendingOutbound =
+                    rows.map(row => {
 
                         const itemCode =
                             String(
@@ -3226,12 +3477,15 @@ function setupOutboundUpload() {
                                     [
                                         "Item Code",
                                         "ItemCode",
-                                        "Item"
+                                        "item_code",
+                                        "ITEM CODE",
+                                        "Code"
                                     ]
                                 ) || ""
                             )
                             .trim()
                             .toUpperCase();
+
 
                         const warehouse =
                             String(
@@ -3240,12 +3494,14 @@ function setupOutboundUpload() {
                                     [
                                         "Warehouse",
                                         "Warehouse Location",
-                                        "Location"
+                                        "warehouse_location",
+                                        "LOCATION"
                                     ]
                                 ) || ""
                             )
                             .trim()
                             .toUpperCase();
+
 
                         const bin =
                             String(
@@ -3254,108 +3510,148 @@ function setupOutboundUpload() {
                                     [
                                         "Bin",
                                         "Bin Location",
-                                        "Bin Location/Code"
+                                        "bin_location",
+                                        "BIN"
                                     ]
                                 ) || ""
                             )
                             .trim()
                             .toUpperCase();
 
-                        const expiryRaw =
-                            getOutboundColumn(
-                                row,
-                                [
-                                    "Expiry Date",
-                                    "Expiry",
-                                    "Expiration Date"
-                                ]
-                            );
 
                         const expiryDate =
                             normalizeOutboundDate(
-                                expiryRaw
+                                getOutboundColumn(
+                                    row,
+                                    [
+                                        "Expiry Date",
+                                        "Expiry",
+                                        "expiry_date",
+                                        "EXPIRY DATE"
+                                    ]
+                                )
                             );
 
-                        const quantityRaw =
+
+                        const quantityValue =
                             getOutboundColumn(
                                 row,
                                 [
-                                    "Qty",
                                     "Quantity",
-                                    "QTY"
+                                    "Qty",
+                                    "QTY",
+                                    "quantity"
                                 ]
                             );
 
                         const quantity =
-                            quantityRaw === ""
+                            quantityValue === ""
                                 ? ""
-                                : Number(quantityRaw);
+                                : Number(
+                                    quantityValue
+                                );
+
 
                         const referenceNo =
                             String(
                                 getOutboundColumn(
                                     row,
                                     [
+                                        "Reference",
                                         "Reference No.",
                                         "Reference No",
-                                        "Reference",
-                                        "Ref No",
-                                        "Ref"
+                                        "Reference Number",
+                                        "Ref",
+                                        "REF"
                                     ]
                                 ) || ""
-                            ).trim();
+                            )
+                            .trim();
+
 
                         return {
+
                             itemCode,
+
                             warehouse,
+
                             bin,
+
                             expiryDate,
+
                             quantity,
+
                             referenceNo
                         };
-
                     });
 
-                    renderOutboundPreview();
 
-                    const invalidRows =
-                        pendingOutbound
-                            .map((row, index) => ({
-                                rowNumber: index + 2,
-                                error: validateOutboundRow(row)
-                            }))
-                            .filter(row => row.error);
+                // =========================================
+                // SHOW PREVIEW
+                // =========================================
 
-                    if (invalidRows.length) {
+                renderOutboundPreview();
 
-                        showOutboundMessage(
-                            `${pendingOutbound.length} row(s) loaded. Please correct the highlighted rows before processing.`,
-                            "error"
+
+                const invalidRows =
+                    pendingOutbound
+                        .map(
+                            (row, index) => ({
+                                rowNumber:
+                                    index + 2,
+
+                                error:
+                                    validateOutboundRow(
+                                        row
+                                    )
+                            })
+                        )
+                        .filter(
+                            row =>
+                                row.error
                         );
 
-                    } else {
 
-                        showOutboundMessage(
-                            `${pendingOutbound.length} row(s) ready for processing.`,
-                            "success"
-                        );
-                    }
-
-                } catch (error) {
-
-                    console.error(
-                        "Outbound preview error:",
-                        error
-                    );
+                if (
+                    invalidRows.length > 0
+                ) {
 
                     showOutboundMessage(
-                        `Unable to read Excel file: ${error.message || "Unknown error"}`,
+                        `${pendingOutbound.length} row(s) loaded. ${invalidRows.length} row(s) need correction before processing.`,
                         "error"
                     );
+
+                } else {
+
+                    showOutboundMessage(
+                        `${pendingOutbound.length} row(s) loaded. Please review before processing.`,
+                        "success"
+                    );
                 }
+
+            } catch (error) {
+
+                console.error(
+                    "Outbound preview error:",
+                    error
+                );
+
+                showOutboundMessage(
+                    "Unable to read outbound file: " +
+                    (
+                        error.message ||
+                        "Unknown error"
+                    ),
+                    "error"
+                );
             }
-        );
-    }
+        }
+    );
+
+
+    // =================================================
+    // PROCESS BUTTON
+    // =================================================
 
     if (processOutboundBtn) {
 
@@ -3364,6 +3660,11 @@ function setupOutboundUpload() {
             processOutbound
         );
     }
+
+
+    // =================================================
+    // CANCEL BUTTON
+    // =================================================
 
     if (cancelOutboundBtn) {
 
@@ -3387,101 +3688,136 @@ function renderOutboundPreview() {
 
     outboundTableBody.innerHTML = "";
 
-    if (!pendingOutbound.length) {
+    if (
+        !pendingOutbound ||
+        pendingOutbound.length === 0
+    ) {
+
+        outboundTableBody.innerHTML = `
+            <tr>
+                <td
+                    colspan="7"
+                    class="empty-state"
+                >
+                    No outbound data loaded.
+                </td>
+            </tr>
+        `;
+
         return;
     }
 
-    pendingOutbound.forEach((row, index) => {
 
-        const tr =
-            document.createElement("tr");
+    pendingOutbound.forEach(
+        (row, index) => {
 
-        tr.dataset.index = index;
+            const validation =
+                validateOutboundRow(row);
 
-        tr.innerHTML = `
+            const tr =
+                document.createElement("tr");
 
-            <td>
-                <input
-                    type="text"
-                    class="outbound-edit"
-                    data-field="itemCode"
-                    value="${escapeHtml(row.itemCode)}"
-                    autocomplete="off"
-                >
-            </td>
+            if (validation !== "") {
+                tr.classList.add(
+                    "invalid-row"
+                );
+            }
 
-            <td>
-                <input
-                    type="text"
-                    class="outbound-edit"
-                    data-field="warehouse"
-                    value="${escapeHtml(row.warehouse)}"
-                    autocomplete="off"
-                >
-            </td>
 
-            <td>
-                <input
-                    type="text"
-                    class="outbound-edit"
-                    data-field="bin"
-                    value="${escapeHtml(row.bin)}"
-                    autocomplete="off"
-                >
-            </td>
+            tr.innerHTML = `
 
-            <td>
-                <input
-                    type="date"
-                    class="outbound-edit"
-                    data-field="expiryDate"
-                    value="${escapeHtml(row.expiryDate)}"
-                >
-            </td>
+                <td>
+                    <input
+                        type="text"
+                        value="${escapeHtml(row.itemCode || "")}"
+                        data-field="itemCode"
+                        data-index="${index}"
+                        class="outbound-edit-input"
+                    >
+                </td>
 
-            <td>
-                <input
-                    type="number"
-                    class="outbound-edit"
-                    data-field="quantity"
-                    value="${escapeHtml(row.quantity)}"
-                    min="0"
-                    step="any"
-                >
-            </td>
+                <td>
+                    <input
+                        type="text"
+                        value="${escapeHtml(row.warehouse || "")}"
+                        data-field="warehouse"
+                        data-index="${index}"
+                        class="outbound-edit-input"
+                    >
+                </td>
 
-            <td>
-                <input
-                    type="text"
-                    class="outbound-edit"
-                    data-field="referenceNo"
-                    value="${escapeHtml(row.referenceNo)}"
-                >
-            </td>
+                <td>
+                    <input
+                        type="text"
+                        value="${escapeHtml(row.bin || "")}"
+                        data-field="bin"
+                        data-index="${index}"
+                        class="outbound-edit-input"
+                    >
+                </td>
 
-            <td>
-                <button
-                    type="button"
-                    class="btn-danger outbound-remove-btn"
-                    data-index="${index}"
-                >
-                    Remove
-                </button>
-            </td>
+                <td>
+                    <input
+                        type="date"
+                        value="${escapeHtml(row.expiryDate || "")}"
+                        data-field="expiryDate"
+                        data-index="${index}"
+                        class="outbound-edit-input"
+                    >
+                </td>
 
-        `;
+                <td>
+                    <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value="${
+                            Number.isFinite(
+                                Number(row.quantity)
+                            )
+                                ? row.quantity
+                                : ""
+                        }"
+                        data-field="quantity"
+                        data-index="${index}"
+                        class="outbound-edit-input"
+                    >
+                </td>
 
-        outboundTableBody.appendChild(tr);
+                <td>
+                    <input
+                        type="text"
+                        value="${escapeHtml(row.referenceNo || "")}"
+                        data-field="referenceNo"
+                        data-index="${index}"
+                        class="outbound-edit-input"
+                    >
+                </td>
 
-        refreshOutboundRowStatus(index);
-    });
+                <td>
+                    <button
+                        type="button"
+                        class="outbound-remove-btn"
+                        data-remove-index="${index}"
+                    >
+                        🗑 Remove
+                    </button>
+                </td>
+
+            `;
+
+            outboundTableBody.appendChild(
+                tr
+            );
+        }
+    );
 
     setupOutboundEditing();
 }
 
 
 // =====================================================
-// SETUP OUTBOUND EDITING
+// OUTBOUND EDITING
 // =====================================================
 
 function setupOutboundEditing() {
@@ -3492,8 +3828,9 @@ function setupOutboundEditing() {
 
     const inputs =
         outboundTableBody.querySelectorAll(
-            ".outbound-edit"
+            ".outbound-edit-input"
         );
+
 
     inputs.forEach(input => {
 
@@ -3501,51 +3838,52 @@ function setupOutboundEditing() {
             "input",
             function () {
 
-                const rowElement =
-                    input.closest("tr");
-
-                if (!rowElement) {
-                    return;
-                }
-
                 const index =
-                    Number(rowElement.dataset.index);
+                    Number(
+                        this.dataset.index
+                    );
+
+                const field =
+                    this.dataset.field;
 
                 if (
-                    Number.isNaN(index) ||
-                    !pendingOutbound[index]
+                    !pendingOutbound[index] ||
+                    !field
                 ) {
                     return;
                 }
 
-                const field =
-                    input.dataset.field;
-
                 let value =
-                    input.value;
+                    this.value;
 
-                if (field === "itemCode") {
 
-                    value =
-                        value.trim().toUpperCase();
-
-                }
-
-                if (field === "warehouse") {
+                if (
+                    field === "itemCode" ||
+                    field === "warehouse" ||
+                    field === "bin"
+                ) {
 
                     value =
-                        value.trim().toUpperCase();
-
+                        value
+                            .trim()
+                            .toUpperCase();
                 }
 
-                if (field === "bin") {
+
+                if (
+                    field === "expiryDate"
+                ) {
 
                     value =
-                        value.trim().toUpperCase();
-
+                        normalizeOutboundDate(
+                            value
+                        );
                 }
 
-                if (field === "quantity") {
+
+                if (
+                    field === "quantity"
+                ) {
 
                     value =
                         value === ""
@@ -3553,18 +3891,32 @@ function setupOutboundEditing() {
                             : Number(value);
                 }
 
+
+                if (
+                    field === "referenceNo"
+                ) {
+
+                    value =
+                        value.trim();
+                }
+
+
                 pendingOutbound[index][field] =
                     value;
 
-                refreshOutboundRowStatus(index);
+                refreshOutboundRowStatus(
+                    index
+                );
             }
         );
     });
+
 
     const removeButtons =
         outboundTableBody.querySelectorAll(
             ".outbound-remove-btn"
         );
+
 
     removeButtons.forEach(button => {
 
@@ -3573,7 +3925,9 @@ function setupOutboundEditing() {
             function () {
 
                 const index =
-                    Number(button.dataset.index);
+                    Number(
+                        this.dataset.removeIndex
+                    );
 
                 removeOutboundRow(index);
             }
@@ -3583,41 +3937,49 @@ function setupOutboundEditing() {
 
 
 // =====================================================
-// REFRESH OUTBOUND ROW STATUS
+// REFRESH ROW VALIDATION
 // =====================================================
 
-function refreshOutboundRowStatus(index) {
+function refreshOutboundRowStatus(
+    index
+) {
 
     if (!outboundTableBody) {
         return;
     }
 
-    const row =
-        pendingOutbound[index];
-
-    const tr =
-        outboundTableBody.querySelector(
-            `tr[data-index="${index}"]`
+    const rows =
+        outboundTableBody.querySelectorAll(
+            "tr"
         );
 
-    if (!row || !tr) {
+    const row =
+        rows[index];
+
+    if (!row) {
         return;
     }
 
-    const error =
-        validateOutboundRow(row);
+    const validation =
+        validateOutboundRow(
+            pendingOutbound[index]
+        );
 
-    if (error) {
+    if (validation === "") {
 
-        tr.classList.add("invalid-row");
+        row.classList.remove(
+            "invalid-row"
+        );
 
-        tr.title = error;
+        row.title = "";
 
     } else {
 
-        tr.classList.remove("invalid-row");
+        row.classList.add(
+            "invalid-row"
+        );
 
-        tr.title = "";
+        row.title = validation;
     }
 }
 
@@ -3629,30 +3991,25 @@ function refreshOutboundRowStatus(index) {
 function removeOutboundRow(index) {
 
     if (
-        index < 0 ||
-        index >= pendingOutbound.length
+        !pendingOutbound ||
+        !pendingOutbound[index]
     ) {
         return;
     }
 
-    pendingOutbound.splice(index, 1);
+    pendingOutbound.splice(
+        index,
+        1
+    );
 
     renderOutboundPreview();
 
-    if (pendingOutbound.length) {
-
-        showOutboundMessage(
-            `${pendingOutbound.length} row(s) remaining.`,
-            "info"
-        );
-
-    } else {
-
-        showOutboundMessage(
-            "All outbound rows were removed.",
-            "info"
-        );
-    }
+    showOutboundMessage(
+        pendingOutbound.length
+            ? `${pendingOutbound.length} outbound row(s) remaining.`
+            : "All outbound rows were removed.",
+        "info"
+    );
 }
 
 
@@ -3669,7 +4026,17 @@ function cancelOutboundUpload() {
     }
 
     if (outboundTableBody) {
-        outboundTableBody.innerHTML = "";
+
+        outboundTableBody.innerHTML = `
+            <tr>
+                <td
+                    colspan="7"
+                    class="empty-state"
+                >
+                    No outbound data loaded.
+                </td>
+            </tr>
+        `;
     }
 
     showOutboundMessage(
@@ -3695,7 +4062,11 @@ async function processOutbound() {
         return;
     }
 
-    if (!pendingOutbound.length) {
+
+    if (
+        !pendingOutbound ||
+        pendingOutbound.length === 0
+    ) {
 
         showOutboundMessage(
             "Please upload and preview an outbound Excel file first.",
@@ -3706,19 +4077,32 @@ async function processOutbound() {
     }
 
 
-    // -------------------------------------------------
-    // VALIDATE ALL ROWS FIRST
-    // -------------------------------------------------
+    // ================================================
+    // VALIDATE ALL ROWS
+    // ================================================
 
     const invalidRows =
         pendingOutbound
-            .map((row, index) => ({
-                rowNumber: index + 2,
-                error: validateOutboundRow(row)
-            }))
-            .filter(row => row.error);
+            .map(
+                (row, index) => ({
+                    rowNumber:
+                        index + 2,
 
-    if (invalidRows.length > 0) {
+                    error:
+                        validateOutboundRow(
+                            row
+                        )
+                })
+            )
+            .filter(
+                row =>
+                    row.error
+            );
+
+
+    if (
+        invalidRows.length > 0
+    ) {
 
         const firstError =
             invalidRows[0];
@@ -3732,9 +4116,9 @@ async function processOutbound() {
     }
 
 
-    // -------------------------------------------------
+    // ================================================
     // LOAD CURRENT INVENTORY
-    // -------------------------------------------------
+    // ================================================
 
     showOutboundMessage(
         "Validating available inventory...",
@@ -3744,7 +4128,7 @@ async function processOutbound() {
     await loadInventory();
 
 
-    // -------------------------------------------------
+    // ================================================
     // BUILD STOCK MAP
     //
     // EXACT MATCH:
@@ -3754,95 +4138,98 @@ async function processOutbound() {
     // EXPIRY DATE
     //
     // NO FEFO
-    // -------------------------------------------------
+    // ================================================
 
     const stockMap = {};
 
-    currentInventoryData.forEach(row => {
 
-        const itemCode =
-            String(
-                row.master_items?.item_code || ""
-            )
-            .trim()
-            .toUpperCase();
+    currentInventoryData.forEach(
+        row => {
 
-        const warehouse =
-            String(
-                row.warehouse_location || ""
-            )
-            .trim()
-            .toUpperCase();
+            const itemCode =
+                String(
+                    row.master_items?.item_code ||
+                    ""
+                )
+                .trim()
+                .toUpperCase();
 
-        const bin =
-            String(
-                row.bin_location || ""
-            )
-            .trim()
-            .toUpperCase();
 
-        const expiryDate =
-            normalizeOutboundDate(
-                row.expiry_date
-            );
+            const warehouse =
+                String(
+                    row.warehouse_location ||
+                    ""
+                )
+                .trim()
+                .toUpperCase();
 
-        const key =
-            `${itemCode}||${warehouse}||${bin}||${expiryDate}`;
 
-        if (!stockMap[key]) {
-            stockMap[key] = 0;
+            const bin =
+                String(
+                    row.bin_location ||
+                    ""
+                )
+                .trim()
+                .toUpperCase();
+
+
+            const expiryDate =
+                normalizeOutboundDate(
+                    row.expiry_date
+                );
+
+
+            const key =
+                `${itemCode}||${warehouse}||${bin}||${expiryDate}`;
+
+
+            if (!stockMap[key]) {
+                stockMap[key] = 0;
+            }
+
+
+            stockMap[key] +=
+                Number(
+                    row.quantity || 0
+                );
         }
-
-        stockMap[key] +=
-            Number(row.quantity || 0);
-    });
+    );
 
 
-    // -------------------------------------------------
-    // BUILD REQUIRED QUANTITY MAP
-    // -------------------------------------------------
+    // ================================================
+    // REQUIRED QUANTITY MAP
+    // ================================================
 
     const requiredMap = {};
 
-    pendingOutbound.forEach(row => {
 
-        const itemCode =
-            String(row.itemCode)
-                .trim()
-                .toUpperCase();
+    pendingOutbound.forEach(
+        row => {
 
-        const warehouse =
-            String(row.warehouse)
-                .trim()
-                .toUpperCase();
+            const key =
+                `${row.itemCode}||${row.warehouse}||${row.bin}||${row.expiryDate}`;
 
-        const bin =
-            String(row.bin)
-                .trim()
-                .toUpperCase();
 
-        const expiryDate =
-            normalizeOutboundDate(
-                row.expiryDate
-            );
+            if (!requiredMap[key]) {
+                requiredMap[key] = 0;
+            }
 
-        const key =
-            `${itemCode}||${warehouse}||${bin}||${expiryDate}`;
 
-        if (!requiredMap[key]) {
-            requiredMap[key] = 0;
+            requiredMap[key] +=
+                Number(
+                    row.quantity
+                );
         }
-
-        requiredMap[key] +=
-            Number(row.quantity);
-    });
+    );
 
 
-    // -------------------------------------------------
-    // CHECK AVAILABLE STOCK
-    // -------------------------------------------------
+    // ================================================
+    // CHECK STOCK FIRST
+    // ================================================
 
-    for (const key in requiredMap) {
+    for (
+        const key in requiredMap
+    ) {
 
         const available =
             stockMap[key] || 0;
@@ -3850,7 +4237,11 @@ async function processOutbound() {
         const required =
             requiredMap[key];
 
-        if (required > available) {
+
+        if (
+            required >
+            available
+        ) {
 
             showOutboundMessage(
                 `Insufficient stock for ${key.replaceAll("||", " / ")}. Required: ${required}, Available: ${available}`,
@@ -3862,14 +4253,15 @@ async function processOutbound() {
     }
 
 
-    // -------------------------------------------------
+    // ================================================
     // PROCESS
-    // -------------------------------------------------
+    // ================================================
 
     showOutboundMessage(
         "Stock validated. Processing outbound...",
         "info"
     );
+
 
     try {
 
@@ -3880,6 +4272,7 @@ async function processOutbound() {
         } =
             await supabaseClient.auth.getUser();
 
+
         if (!user) {
 
             throw new Error(
@@ -3888,89 +4281,113 @@ async function processOutbound() {
         }
 
 
-        // ---------------------------------------------
-        // PROCESS EACH OUTBOUND ROW
-        // ---------------------------------------------
+        // ============================================
+        // EACH OUTBOUND ROW
+        // ============================================
 
-        for (const row of pendingOutbound) {
+        for (
+            const row
+            of pendingOutbound
+        ) {
 
             let remaining =
-                Number(row.quantity);
+                Number(
+                    row.quantity
+                );
 
 
-            // -----------------------------------------
-            // FIND EXACT INVENTORY ROW
-            // -----------------------------------------
+            // ========================================
+            // EXACT INVENTORY MATCH
+            // ========================================
 
             const matchingInventory =
-                currentInventoryData.filter(item => {
+                currentInventoryData.filter(
+                    item => {
 
-                    const itemCode =
-                        String(
-                            item.master_items?.item_code || ""
-                        )
-                        .trim()
-                        .toUpperCase();
+                        const itemCode =
+                            String(
+                                item.master_items?.item_code ||
+                                ""
+                            )
+                            .trim()
+                            .toUpperCase();
 
-                    const warehouse =
-                        String(
-                            item.warehouse_location || ""
-                        )
-                        .trim()
-                        .toUpperCase();
 
-                    const bin =
-                        String(
-                            item.bin_location || ""
-                        )
-                        .trim()
-                        .toUpperCase();
+                        const warehouse =
+                            String(
+                                item.warehouse_location ||
+                                ""
+                            )
+                            .trim()
+                            .toUpperCase();
 
-                    const expiryDate =
-                        normalizeOutboundDate(
-                            item.expiry_date
+
+                        const bin =
+                            String(
+                                item.bin_location ||
+                                ""
+                            )
+                            .trim()
+                            .toUpperCase();
+
+
+                        const expiryDate =
+                            normalizeOutboundDate(
+                                item.expiry_date
+                            );
+
+
+                        return (
+
+                            itemCode ===
+                                row.itemCode &&
+
+                            warehouse ===
+                                row.warehouse &&
+
+                            bin ===
+                                row.bin &&
+
+                            expiryDate ===
+                                row.expiryDate &&
+
+                            Number(
+                                item.quantity || 0
+                            ) > 0
                         );
-
-                    return (
-
-                        itemCode ===
-                            row.itemCode &&
-
-                        warehouse ===
-                            row.warehouse &&
-
-                        bin ===
-                            row.bin &&
-
-                        expiryDate ===
-                            row.expiryDate &&
-
-                        Number(item.quantity || 0) > 0
-                    );
-                });
+                    }
+                );
 
 
-            // -----------------------------------------
-            // DEDUCT EXACT MATCH
-            // -----------------------------------------
+            // ========================================
+            // DEDUCT
+            // ========================================
 
             for (
                 const inventoryRow
                 of matchingInventory
             ) {
 
-                if (remaining <= 0) {
+                if (
+                    remaining <= 0
+                ) {
                     break;
                 }
 
+
                 const available =
                     Number(
-                        inventoryRow.quantity || 0
+                        inventoryRow.quantity ||
+                        0
                     );
 
-                if (available <= 0) {
+
+                if (
+                    available <= 0
+                ) {
                     continue;
                 }
+
 
                 const deduct =
                     Math.min(
@@ -3978,38 +4395,48 @@ async function processOutbound() {
                         available
                     );
 
+
                 const newQuantity =
-                    available - deduct;
+                    available -
+                    deduct;
 
 
-                // -------------------------------------
+                // ==================================
                 // UPDATE INVENTORY
-                // -------------------------------------
+                // ==================================
 
                 const {
-                    error: updateError
+                    error:
+                        updateError
                 } =
                     await supabaseClient
-                        .from("inventory")
+                        .from(
+                            "inventory"
+                        )
                         .update({
-                            quantity: newQuantity
+                            quantity:
+                                newQuantity
                         })
                         .eq(
                             "id",
                             inventoryRow.id
                         );
 
-                if (updateError) {
+
+                if (
+                    updateError
+                ) {
                     throw updateError;
                 }
 
 
-                // -------------------------------------
-                // SAVE TRANSACTION HISTORY
-                // -------------------------------------
+                // ==================================
+                // TRANSACTION HISTORY
+                // ==================================
 
                 const {
-                    error: transactionError
+                    error:
+                        transactionError
                 } =
                     await supabaseClient
                         .from(
@@ -4042,19 +4469,26 @@ async function processOutbound() {
                                 user.id
                         });
 
-                if (transactionError) {
+
+                if (
+                    transactionError
+                ) {
                     throw transactionError;
                 }
 
-                remaining -= deduct;
+
+                remaining -=
+                    deduct;
             }
 
 
-            // -----------------------------------------
-            // FINAL SAFETY CHECK
-            // -----------------------------------------
+            // ========================================
+            // SAFETY CHECK
+            // ========================================
 
-            if (remaining > 0) {
+            if (
+                remaining > 0
+            ) {
 
                 throw new Error(
                     `Unable to deduct complete quantity for ${row.itemCode} / ${row.warehouse} / ${row.bin} / ${row.expiryDate}.`
@@ -4063,9 +4497,9 @@ async function processOutbound() {
         }
 
 
-        // -------------------------------------------------
+        // ================================================
         // SUCCESS
-        // -------------------------------------------------
+        // ================================================
 
         pendingOutbound = [];
 
@@ -4074,8 +4508,19 @@ async function processOutbound() {
         }
 
         if (outboundTableBody) {
-            outboundTableBody.innerHTML = "";
+
+            outboundTableBody.innerHTML = `
+                <tr>
+                    <td
+                        colspan="7"
+                        class="empty-state"
+                    >
+                        No outbound data loaded.
+                    </td>
+                </tr>
+            `;
         }
+
 
         showOutboundMessage(
             "Outbound processed successfully.",
@@ -4083,13 +4528,14 @@ async function processOutbound() {
         );
 
 
-        // -------------------------------------------------
-        // REFRESH CURRENT INVENTORY + SUMMARY
-        // -------------------------------------------------
+        // ================================================
+        // REFRESH INVENTORY + SUMMARY
+        // ================================================
 
         await loadInventory();
 
         await loadInventorySummary();
+
 
     } catch (error) {
 
@@ -4104,3 +4550,111 @@ async function processOutbound() {
         );
     }
 }
+
+/* =====================================================
+   WAREHOUSE INVENTORY — DARK MODE TOGGLE
+===================================================== */
+
+(function () {
+    function initThemeToggle() {
+        const root = document.documentElement;
+        const userArea = document.querySelector(".user-area");
+
+        if (!userArea) {
+            console.warn(
+                "Dark Mode: Hindi nakita ang .user-area sa HTML."
+            );
+            return;
+        }
+
+        // Iwasang gumawa ng duplicate button.
+        if (document.getElementById("themeToggleBtn")) {
+            return;
+        }
+
+        const button = document.createElement("button");
+        button.id = "themeToggleBtn";
+        button.type = "button";
+        button.className = "theme-toggle-btn";
+        button.setAttribute("aria-pressed", "false");
+
+        function getSavedTheme() {
+            try {
+                return localStorage.getItem("warehouseTheme");
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function applyTheme(theme) {
+            const isDark = theme === "dark";
+
+            root.setAttribute(
+                "data-theme",
+                isDark ? "dark" : "light"
+            );
+
+            button.textContent = isDark
+                ? "☀️ Light Mode"
+                : "🌙 Dark Mode";
+
+            button.setAttribute(
+                "aria-pressed",
+                String(isDark)
+            );
+
+            button.setAttribute(
+                "aria-label",
+                isDark
+                    ? "Switch to Light Mode"
+                    : "Switch to Dark Mode"
+            );
+        }
+
+        const savedTheme = getSavedTheme();
+
+        applyTheme(
+            savedTheme === "dark" ? "dark" : "light"
+        );
+
+        button.addEventListener("click", function () {
+            const currentlyDark =
+                root.getAttribute("data-theme") === "dark";
+
+            const nextTheme = currentlyDark
+                ? "light"
+                : "dark";
+
+            applyTheme(nextTheme);
+
+            try {
+                localStorage.setItem(
+                    "warehouseTheme",
+                    nextTheme
+                );
+            } catch (error) {
+                // Theme still works for this page session.
+            }
+        });
+
+        // Ilagay ang toggle bago ang logout button.
+        const logoutButton = userArea.querySelector(
+            ".logout-btn"
+        );
+
+        if (logoutButton) {
+            userArea.insertBefore(button, logoutButton);
+        } else {
+            userArea.appendChild(button);
+        }
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener(
+            "DOMContentLoaded",
+            initThemeToggle
+        );
+    } else {
+        initThemeToggle();
+    }
+})();
