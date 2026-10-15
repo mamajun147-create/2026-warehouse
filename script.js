@@ -472,7 +472,7 @@ function fillTransferWarehouses() {
     [transferFromWarehouse, transferToWarehouse].forEach(select => {
         if (!select) return;
         select.innerHTML = '<option value="">Select Warehouse</option>';
-        ["WMECOM", "WMLAZ", "WMSHOPEE", "WMAIN", "WMBBD", "OTHER"].forEach(w => {
+        ["WMECOM", "WMLAZ", "WMSHOP", "WMAIN", "WMBBD", "OTHER"].forEach(w => {
             select.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(w)}">${escapeHtml(w)}</option>`);
         })
     }); 
