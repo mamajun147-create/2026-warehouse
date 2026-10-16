@@ -132,6 +132,7 @@ const resetInventoryBtn =
 
 // Product photos in Supabase Storage
 const PRODUCT_PHOTO_BUCKET = "NCCI Product Pictures";
+const PRODUCT_PHOTO_FOLDER = "NCCI Product Pictures";
 const productPhotoModal = document.getElementById("productPhotoModal");
 const productPhotoTitle = document.getElementById("productPhotoTitle");
 const productPhotoCode = document.getElementById("productPhotoCode");
