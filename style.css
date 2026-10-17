@@ -812,7 +812,7 @@ html[data-theme="dark"] .table-wrapper {
 html[data-theme="dark"] input:focus-visible,
 html[data-theme="dark"] select:focus-visible,
 html[data-theme="dark"] textarea:focus-visible {
-    outline-color: #38bdf8;
+    outline-color: #00080b;
 }
 
 
@@ -1101,7 +1101,7 @@ body.dark-theme #appSection .menu-btn.active { color: #fff; }
 
 
 /* =========================================================
-   FACEBOOK-STYLE COLLAPSIBLE SIDEBAR — FULL WIDTH WORKSPACE
+   STYLE COLLAPSIBLE SIDEBAR — FULL WIDTH WORKSPACE
    ========================================================= */
 @media (min-width: 721px) {
   #appSection {
