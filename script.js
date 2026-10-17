@@ -1183,10 +1183,12 @@ function generateBinLocations() {
     }
 
 
-       for (let rackLetter = 65; rackLetter <= 71; rackLetter++) {
-        const letter = String.fromCharCode(rackLetter);
-        bins.push(`${letter}1-OVERFLOW`);
+      for (let rackLetter = 65; rackLetter <= 73; rackLetter++) {
+    const letter = String.fromCharCode(rackLetter);
+    bins.push(`${letter}1-OVERFLOW`);
+     
     }
+    bins.push("RECEIVING");
 
     return bins;
 
